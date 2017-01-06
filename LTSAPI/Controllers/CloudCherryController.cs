@@ -107,7 +107,7 @@ namespace LTSAPI.Controllers
                     {
                         Integrationdata = JsonConvert.DeserializeObject<Dictionary<string, object>>(Userdata[userName].ToString());
                         if (Integrationdata.Keys.Contains(IntegrationType.ToString()))
-                            return false;
+                            Integrationdata.Remove(IntegrationType.ToString());
                         Integrationdata.Add(IntegrationType.ToString(), ClientCredentials);
                         Userdata.Remove(userName);
                         Userdata.Add(userName, Integrationdata);
