@@ -210,7 +210,6 @@ namespace LTSAPI.Controllers
                     return null;
                 }
                 await MoveRecord((ExceptionType)Enum.Parse(typeof(ExceptionType), sourceExceptionType, true), (ExceptionType)Enum.Parse(typeof(ExceptionType), DestinationExceptionType, true), userName, (IntegrationType)Enum.Parse(typeof(IntegrationType), integrationType, true), archiveSFRecords);
-                List<Dictionary<string, object>> remainingRecords = await GetGivenExceptionData(userName, integrationType, sourceExceptionType, startDate, endDate);
                 msg.StatusCode = HttpStatusCode.OK;                
                 return msg;
            }

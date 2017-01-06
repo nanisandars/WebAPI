@@ -391,7 +391,7 @@ new KeyValuePair<string,string>("password",Password)
                     }
 
 
-                    return fields;
+                    return fields.OrderBy(item=>item.ToString()).ToList();
                 }
                 else
                     return null;
@@ -488,8 +488,6 @@ new KeyValuePair<string,string>("password",Password)
                         string F1 = Field.ToString();
                         string Qid = map["qid"].ToString();
                         string tag = map["tag"].ToString();
-                        if (!Existingtaglist.Contains(tag))
-                            continue;
                         if (map["disabled"].ToString() == "True")
                             continue;
                         foreach (var res in surveyData.answer.responses)
@@ -531,8 +529,8 @@ new KeyValuePair<string,string>("password",Password)
 
                     if (resp.Result.StatusCode != HttpStatusCode.OK)
                     {
-                        await sentry.LogTheFailedRecord(obj + "<br/>" + respString, "CallOut Exception", "", ExceptionType.Create, surveyData.answer.id, ccusername, IntegrationType.salesforce);
-                        return Ok();
+                        await sentry.LogTheFailedRecord(obj + "<br/>" + respString, "CallOut Exception", obj, ExceptionType.Create, surveyData.answer.id, ccusername, IntegrationType.salesforce);
+                        return BadRequest();
                     }
 
                     if (resp.Result.StatusCode == HttpStatusCode.OK)
@@ -564,7 +562,7 @@ new KeyValuePair<string,string>("password",Password)
                                             errFieldVsValues = item.Value.ToString();
                                             break;
                                         }
-                                    case "Field Level Exception":
+                                    case "FieldLevelException":
                                         {
                                             fLevelExceptionMsg = item.Value.ToString();
                                             break;
@@ -599,8 +597,8 @@ new KeyValuePair<string,string>("password",Password)
                             }
                             else
                             {
-                                sentry.LogTheFailedRecord(obj + "<br/>" + respString, "UnKnown Exceptions", "", ExceptionType.Create, surveyData.answer.id, ccusername, IntegrationType.salesforce);
-                                return Ok();
+                                await sentry.LogTheFailedRecord(obj + "<br/>" + respString, "UnKnown Exceptions", "", ExceptionType.Create, surveyData.answer.id, ccusername, IntegrationType.salesforce);
+                                return BadRequest();
                             }
                         }
 
@@ -610,6 +608,7 @@ new KeyValuePair<string,string>("password",Password)
                 }
                 else
                 {
+                   
                     LogThisError("No Field mappings were found while  inserting ticket into SF.");
                     await sentry.LogTheFailedRecord("No Insert Field Mapping Found for this USER.", "Token", "", ExceptionType.General, surveyData.answer.id, ccusername, IntegrationType.salesforce);
                     return BadRequest();
@@ -629,7 +628,7 @@ new KeyValuePair<string,string>("password",Password)
             if (ExceptionRaised == "Timeout")
             {
                 await sentry.LogTheFailedRecord(ExceptionRaisedMessage, "TimedOut Exception", "", ExceptionType.Create, surveyData.answer.id, ccusername, IntegrationType.salesforce);
-
+                return BadRequest();
 
             }
             if (ExceptionRaised == "Unknown")
@@ -637,7 +636,7 @@ new KeyValuePair<string,string>("password",Password)
                 await sentry.LogTheFailedRecord(ExceptionRaisedMessage, "Unknown Exception", "", ExceptionType.General, surveyData.answer.id, ccusername, IntegrationType.salesforce);
             
             }
-            return BadRequest();
+            return Ok();
         }
 
         public void LogThisError(string Errormessage)

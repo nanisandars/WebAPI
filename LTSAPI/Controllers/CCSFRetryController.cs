@@ -2,7 +2,6 @@
 using LTSAPI.CC_Classes;
 using Newtonsoft.Json;
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Configuration;
 using System.IO;
@@ -44,12 +43,12 @@ namespace LTSAPI.Controllers
                 string authEndPoint = "https://login.salesforce.com/services/oauth2/authorize";
                 System.Net.ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12 | SecurityProtocolType.Tls11 | SecurityProtocolType.Tls;
 
-                var postCrendentials = new[] {
-   new KeyValuePair<string,string>("response_type","code"),
-new KeyValuePair<string,string>("client_id", clientId),    
-new KeyValuePair<string,string>("client_secret", secretKey),  
-new KeyValuePair<string,string>("redirect_uri", ConfigurationManager.AppSettings["SFCallbackURL"])
-};
+                                    var postCrendentials = new[] {
+                    new KeyValuePair<string,string>("response_type","code"),
+                    new KeyValuePair<string,string>("client_id", clientId),    
+                    new KeyValuePair<string,string>("client_secret", secretKey),  
+                    new KeyValuePair<string,string>("redirect_uri", ConfigurationManager.AppSettings["SFCallbackURL"])
+                    };
 
                 HttpRequestMessage req = new HttpRequestMessage(HttpMethod.Post, new Uri(authEndPoint));
                 req.Content = new FormUrlEncodedContent(postCrendentials);
@@ -197,7 +196,7 @@ new KeyValuePair<string,string>("redirect_uri", ConfigurationManager.AppSettings
 
         //Insert the records manually fired from the SCREEN at SF END
         [HttpPost]
-        [Route("api/CCSFRetry/ManualTriggerCaseInserts")]
+        [Route("api/CCSFRetry/retryManuallyFailedRecordsSFInsert")]
         public async Task<HttpResponseMessage> retryManuallyFailedRecordsSFInsert(string userName, string exceptionType, string startDate, string endDate)
         {
             HttpResponseMessage msg = new HttpResponseMessage();
@@ -217,19 +216,21 @@ new KeyValuePair<string,string>("redirect_uri", ConfigurationManager.AppSettings
 
                 if (httpResponse == "")
                 {
-                    return null;
+                    msg.StatusCode = HttpStatusCode.BadRequest;
+                    return msg;
                 }
 
                 List<Dictionary<string, object>> retryRecords = JsonConvert.DeserializeObject<List<Dictionary<string, object>>>(httpResponse); //Converting the response into dictionary collection 
 
                 //Checks whether the reponse has been converted or not
-                if (retryRecords == null)
+                if (retryRecords == null || retryRecords.Count == 0)
                 {
-                    if (retryRecords.Count == 0)
-                    {
-                        return null;
-                    }
-                    return null;
+
+
+                    msg.StatusCode = HttpStatusCode.BadRequest;
+                    return msg;
+
+
                 }
 
                 HttpClient client = new HttpClient();
@@ -238,7 +239,14 @@ new KeyValuePair<string,string>("redirect_uri", ConfigurationManager.AppSettings
                 string serviceEndPoint = "/services/apexrest/CCService/insertCCTicket";
                 Dictionary<string, object> exceptiondata = cloudCherryController.getClientsettingsByKey("username", userName, IntegrationType.salesforce);
                 if (exceptiondata == null)
-                    return null;
+                {
+
+
+                    msg.StatusCode = HttpStatusCode.BadRequest;
+                    return msg;
+
+
+                }
                 string Clientid = exceptiondata["clientid"].ToString();
                 string Secret = exceptiondata["secret"].ToString();
                 string Rtoken = exceptiondata["rtoken"].ToString();
@@ -253,7 +261,14 @@ new KeyValuePair<string,string>("redirect_uri", ConfigurationManager.AppSettings
                 if (tokendetails[0] == "invalid_grant")
                 {
                     if (await sentry.LogTheFailedRecord("Refresh Token has expired.", "TokenExpired", "", ExceptionType.General, "", userName, IntegrationType.salesforce))
-                        return null;
+                    {
+
+
+                        msg.StatusCode = HttpStatusCode.BadRequest;
+                        return msg;
+
+
+                    }
                 }
 
                 Dictionary<string, object> Integrationdata = await sentry.GetIntegrationData(userName, integrationType);
@@ -291,8 +306,15 @@ new KeyValuePair<string,string>("redirect_uri", ConfigurationManager.AppSettings
                             notificationData.notification = userName;
 
                             HttpStatusCode httpCode = new HttpStatusCode();
-                            connect2sf.getDataFromAPI(notificationData);
-                            isexist = true;
+                            IHttpActionResult code = await connect2sf.getDataFromAPI(notificationData);
+                            if (code.ToString() == "System.Web.Http.Results.OkResult")
+                                isexist = true;
+                            else
+                            {
+                                isexist = true;
+                                record["ExceptionRaisedOn"] = DateTime.Now;
+                                Exceptiondatacopy.Add(record);
+                            }
 
                         }
                     }
@@ -304,7 +326,7 @@ new KeyValuePair<string,string>("redirect_uri", ConfigurationManager.AppSettings
 
                 await sentry.AddCompleteException(userName, integrationType, (ExceptionType)Enum.Parse(typeof(ExceptionType), exceptionType, true), Exceptiondatacopy);
 
-                List<Dictionary<string, object>> listFailedRecords = await sentry.GetGivenExceptionData(userName, integrationType.ToString(), exceptionType, startDate, endDate);
+
                 msg.StatusCode = HttpStatusCode.OK;
                 return msg;//Returning the updated list of records
             }
@@ -321,9 +343,9 @@ new KeyValuePair<string,string>("redirect_uri", ConfigurationManager.AppSettings
         //Insert the records manually fired from the SCREEN at CC END
         [HttpPost]
         [Route("api/CCSFRetry/ManualTriggerNotesInserts")]
-        public async Task<List<Dictionary<string, object>>> retryManuallyFailedRecordsCCInsert(string userName, string exceptionType, string startDate, string endDate)
+        public async Task<HttpResponseMessage> retryManuallyFailedRecordsCCInsert(string userName, string exceptionType, string startDate, string endDate)
         {
-
+            HttpResponseMessage responsemessage = new HttpResponseMessage();
             try
             {
                 string httpResponse = "";
@@ -339,7 +361,8 @@ new KeyValuePair<string,string>("redirect_uri", ConfigurationManager.AppSettings
 
                 if (httpResponse == "")
                 {
-                    return null;
+                    responsemessage.StatusCode = HttpStatusCode.BadRequest;
+                    return responsemessage;
                 }
 
                 List<Dictionary<string, object>> retryRecords = JsonConvert.DeserializeObject<List<Dictionary<string, object>>>(httpResponse); //Converting the response into dictionary collection 
@@ -347,11 +370,14 @@ new KeyValuePair<string,string>("redirect_uri", ConfigurationManager.AppSettings
                 //Checks whether the reponse has been converted or not
                 if (retryRecords == null)
                 {
-                    if (retryRecords.Count == 0)
-                    {
-                        return null;
-                    }
-                    return null;
+
+                    responsemessage.StatusCode = HttpStatusCode.BadRequest;
+                    return responsemessage;
+                }
+                if (retryRecords.Count == 0)
+                {
+                    responsemessage.StatusCode = HttpStatusCode.BadRequest;
+                    return responsemessage;
                 }
 
                 HttpClient client = new HttpClient();
@@ -404,15 +430,12 @@ new KeyValuePair<string,string>("redirect_uri", ConfigurationManager.AppSettings
 
                                 //Converting the value of the current key into dictionary
                                 Dictionary<string, object> ticketDocument = JsonConvert.DeserializeObject<Dictionary<string, object>>(record["FailedRecord"].ToString());
-                                if (ticketDocument == null)
+                              
+                                if (ticketDocument == null||ticketDocument.Count == 0)
                                 {
-                                    if (ticketDocument.Count == 0)
-                                    {
-                                        return null;
-                                    }
-                                    return null;
+                                    responsemessage.StatusCode = HttpStatusCode.BadRequest;
+                                    return responsemessage;
                                 }
-
                                 string CCTicketId = "";
 
                                 //Declaring the notes object
@@ -471,9 +494,8 @@ new KeyValuePair<string,string>("redirect_uri", ConfigurationManager.AppSettings
                 await sentry.AddCompleteException(userName, integrationType, (ExceptionType)Enum.Parse(typeof(ExceptionType), exceptionType, true), Exceptiondatacopy);
                 Task.Delay(3000);
 
-                List<Dictionary<string, object>> listFailedRecords = await sentry.GetGivenExceptionData(userName, integrationType.ToString(), exceptionType, startDate, endDate);
-
-                return listFailedRecords;//Returning the updated list of records
+                responsemessage.StatusCode = HttpStatusCode.OK;
+                return responsemessage;
             }
             catch (Exception ex)
             {

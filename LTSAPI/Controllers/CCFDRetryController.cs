@@ -148,12 +148,12 @@ namespace LTSAPI.Controllers
         //Insert the records manually fired from the SCREEN at FD END
         [HttpPost]
         [Route("api/CCFDRetry/ManualTriggerFDTicketInserts")]
-        public async Task<List<Dictionary<string, object>>> retryManuallyFailedRecordsFDInsert(string userName, string startDate, string endDate)
+        public async Task<HttpResponseMessage> retryManuallyFailedRecordsFDInsert(string userName, string startDate, string endDate)
         {
             string FDAPIKey = "";
             string FDURL = "";
             string CCApikey = "";
-
+            HttpResponseMessage resMsg = new HttpResponseMessage();
             try
             {
                 string httpResponse = "";
@@ -170,7 +170,8 @@ namespace LTSAPI.Controllers
 
                 if (httpResponse == "")
                 {
-                    return null;
+                    resMsg.StatusCode = HttpStatusCode.OK;
+                    return resMsg;
                 }
 
                 List<Dictionary<string, object>> retryRecords = JsonConvert.DeserializeObject<List<Dictionary<string, object>>>(httpResponse); //Converting the response into dictionary collection 
@@ -180,9 +181,11 @@ namespace LTSAPI.Controllers
                 {
                     if (retryRecords.Count == 0)
                     {
-                        return null;
+                        resMsg.StatusCode = HttpStatusCode.OK;
+                        return resMsg;
                     }
-                    return null;
+                    resMsg.StatusCode = HttpStatusCode.OK;
+                    return resMsg;
                 }
 
                 HttpClient client = new HttpClient();
@@ -229,15 +232,19 @@ namespace LTSAPI.Controllers
                             notificationData.answer = answer;
                             notificationData.notification = userName;
 
-                            HttpStatusCode httpCode = new HttpStatusCode();
+                            HttpResponseMessage httpCode = new HttpResponseMessage();
                             httpCode = await fdcc.AddATicket(notificationData);
-
-                            if (httpCode == HttpStatusCode.Created)
-                            {
+                            if (httpCode.StatusCode == HttpStatusCode.OK)
                                 isexist = true;
+                            else
+                            {
+                                
+                                isexist = true;
+                                Exceptiondatacopy.Add(sentry.RenewthisRecord(record["ExceptionDescription"].ToString(), DateTime.Now.ToString(), record["ExceptionRaisedAt"].ToString(), record["FailedRecord"].ToString(), ExceptionType.Create, ansID, userName));
                             }
+
                         }
-                        isexist = true;
+                       
                     }
 
                     if (!isexist)
@@ -245,27 +252,29 @@ namespace LTSAPI.Controllers
                 }
                 await sentry.AddCompleteException(userName, integrationType, ExceptionType.Create, Exceptiondatacopy);
                 Task.Delay(3000);
-                return new List<Dictionary<string, object>>();
+                resMsg.StatusCode = HttpStatusCode.OK;
+                return resMsg;
             }
             catch (Exception ex)
             {
-                return null;
+                resMsg.StatusCode = HttpStatusCode.OK;
+                return resMsg;
             }
         }
 
         //Insert the records manually fired from the SCREEN at CC END
         [HttpPost]
         [Route("api/CCFDRetry/ManualTriggerNotesInserts")]
-        public async Task<List<Dictionary<string, object>>> retryManuallyFailedRecordsCCInsert(string userName, string startDate, string endDate)
+        public async Task<HttpResponseMessage> retryManuallyFailedRecordsCCInsert(string userName, string startDate, string endDate)
         {
             string FDAPIKey = "";
             string FDURL = "";
             string CCApikey = "";
             string ccticketid = "";
+            HttpResponseMessage msg = new HttpResponseMessage();
             try
             {
-                string httpResponse = "";
-
+                string httpResponse = "";                
                 //REad the resposne from the request
                 using (var contentStream = await this.Request.Content.ReadAsStreamAsync())
                 {
@@ -278,7 +287,8 @@ namespace LTSAPI.Controllers
 
                 if (httpResponse == "")
                 {
-                    return null;
+                    msg.StatusCode = HttpStatusCode.OK;
+                    return msg;
                 }
 
                 List<Dictionary<string, object>> retryRecords = JsonConvert.DeserializeObject<List<Dictionary<string, object>>>(httpResponse); //Converting the response into dictionary collection 
@@ -288,9 +298,11 @@ namespace LTSAPI.Controllers
                 {
                     if (retryRecords.Count == 0)
                     {
-                        return null;
+                        msg.StatusCode = HttpStatusCode.OK;
+                        return msg;
                     }
-                    return null;
+                    msg.StatusCode = HttpStatusCode.OK;
+                    return msg;
                 }
 
                 FreshDesk frshDesk = new FreshDesk();
@@ -321,7 +333,7 @@ namespace LTSAPI.Controllers
                         if (record["_Id"].ToString() == retryRecord["id"].ToString())
                         {
                             string[] arrSplit = record["FailedRecord"].ToString().Split(new string[] { "||||" }, StringSplitOptions.None);
-                            ccticketid = arrSplit[1];
+                            ccticketid = record["AnswerId"].ToString();
 
                             Dictionary<string, object> ticketDocument = JsonConvert.DeserializeObject<Dictionary<string, object>>(arrSplit[0]);
 
@@ -329,39 +341,35 @@ namespace LTSAPI.Controllers
                             {
                                 if (ticketDocument.Count == 0)
                                 {
-                                    return null;
+                                    msg.StatusCode = HttpStatusCode.OK;
+                                    return msg;
                                 }
-                                return null;
+                                msg.StatusCode = HttpStatusCode.OK;
+                                return msg;
                             }
 
-                            string CCTicketId = "";
+                           // string CCTicketId = "";
 
                             //Declaring the notes object
                             StringBuilder noteStructure = new StringBuilder();
 
-                            //Loop through the key values in the dictionary of the failed record
-                            foreach (var res in ticketDocument)
-                            {
-                                StringBuilder propertiesNote = new StringBuilder();
-                                if ((!(res.Key == "attributes")) && (!(res.Key == "apiKey")))
-                                {
-                                    propertiesNote.Append(res.Key + ":" + res.Value + "      ");
-                                }
-                                noteStructure.Append(propertiesNote);
-                            }
-
-                            notes.noteTime = DateTime.Now.ToString();
-                            notes.note = noteStructure.ToString();
-                            var serializeNote = JsonConvert.SerializeObject(notes);
+                         
                             serviceEndPoint = serviceEndPoint + ccticketid; //Appendin the ticket/answer id with the service
                             HttpRequestMessage reqInsertNote = new HttpRequestMessage(HttpMethod.Post, new Uri(serviceEndPoint));
-                            reqInsertNote.Content = new StringContent(serializeNote, Encoding.UTF8, "application/json");
+                            reqInsertNote.Content = new StringContent(arrSplit[0].ToString(), Encoding.UTF8, "application/json");
 
                             string ccAccessToken = await cloudCherryController.getCCAccessToken(userName, CCApikey);
                             reqInsertNote.Headers.Add("Authorization", "Bearer " + ccAccessToken);
                             HttpResponseMessage insertNoteResponse = await client.SendAsync(reqInsertNote); //Sending request to CC in order to insert NOTE
                             string stringResponse = await insertNoteResponse.Content.ReadAsStringAsync();
-                            isexist = true;
+                            if (insertNoteResponse.IsSuccessStatusCode)
+                                isexist = true;
+                            else
+                            {
+                                record["ExceptionRaisedOn"] = DateTime.Now;
+                                Exceptiondatacopy.Add(record);
+                                isexist = true;
+                            }
                         }
                     }
 
@@ -371,14 +379,16 @@ namespace LTSAPI.Controllers
 
                 await sentry.AddCompleteException(userName, integrationType, ExceptionType.Update, Exceptiondatacopy);
                 Task.Delay(3000);
-                return await sentry.GetGivenExceptionData(userName, integrationType.ToString(), ExceptionType.Update.ToString(), startDate, endDate);
+               
 
             }
             catch (Exception ex)
             {
-                return null;
+                msg.StatusCode = HttpStatusCode.BadRequest;
+                return msg;
             }
-
+            msg.StatusCode = HttpStatusCode.BadRequest;
+            return msg;
         }
 
         #endregion
