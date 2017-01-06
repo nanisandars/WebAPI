@@ -18,7 +18,6 @@ namespace Cherry.HelperClasses
         private string _ccUserName = "";
         private string _ccApiKey = "";
         private string _sfRefreshToken = "";   
-        private string EncryptKey = ConfigurationManager.AppSettings["EncryptKey"];
         TDesEncryption tDesEncryption = new TDesEncryption();
 
         public SalesForce() { } // Used in Retry Controller

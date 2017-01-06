@@ -107,8 +107,9 @@ namespace LTSAPI.Controllers
                     {
                         Integrationdata = JsonConvert.DeserializeObject<Dictionary<string, object>>(Userdata[userName].ToString());
                         if (Integrationdata.Keys.Contains(IntegrationType.ToString()))
-                            return false;
+                            Integrationdata.Remove(IntegrationType.ToString());
                         Integrationdata.Add(IntegrationType.ToString(), ClientCredentials);
+                        Userdata.Remove(userName);
                         Userdata.Add(userName, Integrationdata);
                     }
                     else
@@ -251,7 +252,7 @@ namespace LTSAPI.Controllers
 
         public string getFDClientsettingsByCCAPI(string Key, string Value, ref string UserName)
         {
-            string settingsPath = HttpContext.Current.Server.MapPath("~/" + ConfigurationManager.AppSettings["FDSettingsPath"]);
+            string settingsPath = HttpContext.Current.Server.MapPath("~/" + ConfigurationManager.AppSettings["Credentials"]);
             Dictionary<string, object> ccfduser = getFDClientsettings(settingsPath);
 
             if (ccfduser == null)
@@ -296,29 +297,33 @@ namespace LTSAPI.Controllers
         
         public Dictionary<string, object> getClientsettingsByKey(string Key, string Value, IntegrationType integrationtype)
         {
-            string AllUsersData = RetreiveIntegrationData(Usercredentialspath);
-            if (AllUsersData == "")
-                return null;
-           Dictionary<string, object> Userdata = JsonConvert.DeserializeObject<Dictionary<string, object>>(AllUsersData);
-           Dictionary<string, object> Integrationdata = new Dictionary<string, object>();
-           Dictionary<string, object> Exceptiondata = new Dictionary<string, object>();
+            try
+            {
+                string AllUsersData = RetreiveIntegrationData(Usercredentialspath);
+                if (AllUsersData == "")
+                    return null;
+                Dictionary<string, object> Userdata = JsonConvert.DeserializeObject<Dictionary<string, object>>(AllUsersData);
+                Dictionary<string, object> Integrationdata = new Dictionary<string, object>();
+                Dictionary<string, object> Exceptiondata = new Dictionary<string, object>();
 
-           foreach (KeyValuePair<string, object> KP in Userdata)
-           {
-               Integrationdata = JsonConvert.DeserializeObject<Dictionary<string, object>>(Userdata[KP.Key].ToString());
-               if (Integrationdata.Keys.Contains(integrationtype.ToString()))
-               {
-                   Exceptiondata = JsonConvert.DeserializeObject<Dictionary<string, object>>(Integrationdata[integrationtype.ToString()].ToString());
+                foreach (KeyValuePair<string, object> KP in Userdata)
+                {
+                    Integrationdata = JsonConvert.DeserializeObject<Dictionary<string, object>>(Userdata[KP.Key].ToString());
+                    if (Integrationdata.Keys.Contains(integrationtype.ToString()))
+                    {
+                        Exceptiondata = JsonConvert.DeserializeObject<Dictionary<string, object>>(Integrationdata[integrationtype.ToString()].ToString());
 
-                   if (Exceptiondata.Keys.Contains(Key))
-                   {
-                       if (Exceptiondata[Key].ToString() == Value)
-                       {
-                           return Exceptiondata;
-                       }
-                   }
-               }
+                        if (Exceptiondata.Keys.Contains(Key))
+                        {
+                            if (Exceptiondata[Key].ToString() == Value)
+                            {
+                                return Exceptiondata;
+                            }
+                        }
+                    }
+                }
             }
+            catch { }
           return null;
         }
         
@@ -446,22 +451,32 @@ namespace LTSAPI.Controllers
                 var Ques = await GetQuestions(Access_token);
                 string Questionstring = "|";
                 List<Dictionary<string, object>> tagDetails = new List<Dictionary<string, object>>();
+                List<string> Tagslist = new List<string>();
                 foreach (var q in Ques)
                 {
                     if (q.QuestionTags == null)
                         continue;
-                    Dictionary<string, object> Qids = new Dictionary<string, object>();
+                 
                     foreach (var tag in q.QuestionTags)
                     {
                         if (Questionstring.Contains("|" + tag + "|"))
                             continue;
                         Questionstring = Questionstring + tag + "|";
-                        Qids.Add("tag", tag);
-                        Qids.Add("qid", q.Id);
-                        tagDetails.Add(Qids);
-
+                      
+                      
+                        Tagslist.Add(tag + "|" + q.Id);
                     }
 
+                }
+                Tagslist = Tagslist.OrderBy(item => item.ToString()).ToList();
+                foreach (string tag_qid in Tagslist)
+                {
+                    Dictionary<string, object> Qids = new Dictionary<string, object>();
+                    char[] splitstr = { '|' };
+                    string[] tagdata = tag_qid.ToString().Split(splitstr);
+                    Qids.Add("tag", tagdata[0]);
+                    Qids.Add("qid", tagdata[1]);
+                    tagDetails.Add(Qids);
                 }
                 return tagDetails;
             }
