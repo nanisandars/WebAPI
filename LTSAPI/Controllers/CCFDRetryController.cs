@@ -23,7 +23,7 @@ namespace LTSAPI.Controllers
         FreshDesk freshDesk = new FreshDesk();
         CloudCherryController cloudCherryController = new CloudCherryController();
         SentryController sentry = new SentryController();
-
+        FDCCController fdcc = new FDCCController();
 
         IntegrationType integrationType = IntegrationType.freshdesk;
         string FDSettingsPath = ConfigurationManager.AppSettings["FDSettingsPath"];
@@ -203,8 +203,6 @@ namespace LTSAPI.Controllers
                 System.Net.ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12 | SecurityProtocolType.Tls11 | SecurityProtocolType.Tls;
                 //Get the token details of the salesforce              
 
-                FDCCController fdcc = new FDCCController();
-
                 Dictionary<string, object> Integrationdata = await sentry.GetIntegrationData(userName, integrationType);
 
                 List<Dictionary<string, object>> Exceptiondata = JsonConvert.DeserializeObject<List<Dictionary<string, object>>>(Integrationdata[ExceptionType.Create.ToString()].ToString());
@@ -228,9 +226,12 @@ namespace LTSAPI.Controllers
                             string responseAnswer = await resAnswerFromCC.Content.ReadAsStringAsync();
                             PostSurvey answer = new PostSurvey();
                             answer = JsonConvert.DeserializeObject<PostSurvey>(responseAnswer);
+                            string FDControllerName = ConfigurationManager.AppSettings["FDControllerName"].ToString();
+                            
+
                             NotificationData notificationData = new NotificationData();
                             notificationData.answer = answer;
-                            notificationData.notification = userName;
+                            notificationData.notification = await cloudCherryController.GetNotificationName(ccAccessToken, FDControllerName); 
 
                             HttpResponseMessage httpCode = new HttpResponseMessage();
                             httpCode = await fdcc.AddATicket(notificationData);
@@ -409,14 +410,13 @@ namespace LTSAPI.Controllers
                 FreshDesk freshDesk = new FreshDesk();
                 client.Timeout = TimeSpan.FromSeconds(10);
                 Dictionary<string, object> Userdata = cloudCherryController.GetUserCredentials(userName, IntegrationType.freshdesk);
-                CCApikey = Userdata["ccapikey"].ToString();
-                char[] splitstr = { '|' };
-                string[] integrationdetails = Userdata["integrationDetails"].ToString().Split(splitstr);
-                FDAPIKey = integrationdetails[1];
-                FDURL = integrationdetails[0];
-                string serviceEndPoint = FDURL + "/api/v2/tickets";
-                string apiKey = FDAPIKey + ":X";
+                
+                
+                if (Userdata == null)
+                    return Ok();
 
+                CCApikey = Userdata["ccapikey"].ToString();
+               
                 System.Net.ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12 | SecurityProtocolType.Tls11 | SecurityProtocolType.Tls;
 
                 Dictionary<string, object> Integrationdata = await sentry.GetIntegrationData(userName, integrationType);
@@ -436,22 +436,33 @@ namespace LTSAPI.Controllers
                     {
                         bool isexist = false;
 
-                        if (record.Keys.Contains("FailedRecord"))
+                        string ansID = record["AnswerId"].ToString();
+                        string answerURL = "https://api.getcloudcherry.com/api/Answer/";
+                        //Get AnswerByID from CC
+                        HttpRequestMessage reqAnswerFromCC = new HttpRequestMessage(HttpMethod.Get, new Uri(answerURL + ansID));
+                        string ccAccessToken = await cloudCherryController.getCCAccessToken(userName, CCApikey);
+                        reqAnswerFromCC.Headers.Add("Authorization", "Bearer " + ccAccessToken);
+                        HttpResponseMessage resAnswerFromCC = new HttpResponseMessage();
+                        resAnswerFromCC = await client.SendAsync(reqAnswerFromCC);
+                        string responseAnswer = await resAnswerFromCC.Content.ReadAsStringAsync();
+                        PostSurvey answer = new PostSurvey();
+                        answer = JsonConvert.DeserializeObject<PostSurvey>(responseAnswer);
+                        string FDControllerName = ConfigurationManager.AppSettings["FDControllerName"].ToString();
+
+
+                        NotificationData notificationData = new NotificationData();
+                        notificationData.answer = answer;
+                        notificationData.notification = await cloudCherryController.GetNotificationName(ccAccessToken, FDControllerName);
+
+                        HttpResponseMessage httpCode = new HttpResponseMessage();
+                        httpCode = await fdcc.AddATicket(notificationData);
+                        if (httpCode.StatusCode == HttpStatusCode.OK)
+                            isexist = true;
+                        else
                         {
-                            string ansId = "";
-                            Dictionary<string, object> failRecs = JsonConvert.DeserializeObject<Dictionary<string, object>>(record["FailedRecord"].ToString());
-                            Dictionary<string, object> failRecord = new Dictionary<string, object>();
 
-                            HttpRequestMessage reqInsertCase = new HttpRequestMessage(HttpMethod.Post, new Uri(serviceEndPoint));
-                            reqInsertCase.Content = new StringContent(record["FailedRecord"].ToString(), Encoding.UTF8, "application/json");
-                            reqInsertCase.Headers.Add("Authorization", "Bearer " + Convert.ToBase64String(Encoding.Default.GetBytes(apiKey)));
-                            HttpResponseMessage inserCaseResponse = await client.SendAsync(reqInsertCase);
-                            string respString = await inserCaseResponse.Content.ReadAsStringAsync();
-                            if (inserCaseResponse.StatusCode != HttpStatusCode.OK)
-                            {
-                                await sentry.LogTheFailedRecord(record["FailedRecord"].ToString() + "<br/>" + respString, "Token", "", ExceptionType.General, ansId, userName, IntegrationType.freshdesk);
-
-                            }
+                            isexist = true;
+                            Exceptiondatacopy.Add(sentry.RenewthisRecord(record["ExceptionDescription"].ToString(), DateTime.Now.ToString(), record["ExceptionRaisedAt"].ToString(), record["FailedRecord"].ToString(), ExceptionType.Create, ansID, userName));
                         }
 
                         if (!isexist)
@@ -515,6 +526,9 @@ namespace LTSAPI.Controllers
                 string serviceEndPoint = "https://api.getcloudcherry.com/api/Answers/Note/";
 
                 Dictionary<string, object> Userdata = cloudCherryController.GetUserCredentials(userName, IntegrationType.freshdesk);
+                if (Userdata == null)
+                    return Ok();
+
                 CCApikey = Userdata["ccapikey"].ToString();
                 char[] splitstr = { '|' };
                 string[] integrationdetails = Userdata["integrationDetails"].ToString().Split(splitstr);
@@ -529,7 +543,7 @@ namespace LTSAPI.Controllers
 
                 foreach (KeyValuePair<string, object> kpdata in Integrationdata)
                 {
-                    string[] exceptiontypes = new string[] { "InsertNotesRetry" };
+                    string[] exceptiontypes = new string[] { "Update" };
                     if (!exceptiontypes.Contains(kpdata.Key))
                         continue;
                     Exceptiondata = JsonConvert.DeserializeObject<List<Dictionary<string, object>>>(Integrationdata[kpdata.Key].ToString());
@@ -542,15 +556,10 @@ namespace LTSAPI.Controllers
                         {
                             StringBuilder propertiesNote = new StringBuilder();
                             string[] arrSplits = record["FailedRecord"].ToString().Split(new string[] { "||||" }, StringSplitOptions.None);
-                            CCTicketId = arrSplits[1];
-                            Dictionary<string, object> ticketDocument = JsonConvert.DeserializeObject<Dictionary<string, object>>(arrSplits[0]);
-                            StringBuilder noteStructure = new StringBuilder();
-                            foreach (var res in ticketDocument)
-                            {
-                                noteStructure.Append(res.Key + ":" + res.Value + "      ");
-                            }
+                            CCTicketId = record["AnswerId"].ToString();
+                            
                             notes.noteTime = DateTime.Now.ToString();
-                            notes.note = noteStructure.ToString();
+                            notes.note = arrSplits[0].ToString();
                             var serializeNote = JsonConvert.SerializeObject(notes);
                             serviceEndPoint = serviceEndPoint + CCTicketId; ;
                             HttpRequestMessage reqInsertNote = new HttpRequestMessage(HttpMethod.Post, new Uri(serviceEndPoint));

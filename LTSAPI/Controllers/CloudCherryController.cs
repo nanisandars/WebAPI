@@ -107,7 +107,7 @@ namespace LTSAPI.Controllers
                     {
                         Integrationdata = JsonConvert.DeserializeObject<Dictionary<string, object>>(Userdata[userName].ToString());
                         if (Integrationdata.Keys.Contains(IntegrationType.ToString()))
-                            return false;
+                            Integrationdata.Remove(IntegrationType.ToString());
                         Integrationdata.Add(IntegrationType.ToString(), ClientCredentials);
                         Userdata.Remove(userName);
                         Userdata.Add(userName, Integrationdata);
@@ -492,7 +492,7 @@ namespace LTSAPI.Controllers
             using (System.IO.StreamWriter file = new System.IO.StreamWriter(logPath, true))
             {
 
-                file.WriteLine("Message :" + Errormessage + "<br/>" + Environment.NewLine + "Date :" + DateTime.Now.ToString());
+                file.WriteLine("Message :" + Errormessage  + Environment.NewLine + "Date :" + DateTime.Now.ToString());
                 file.WriteLine(Environment.NewLine + "-----------------------------------------------------------------------------" + Environment.NewLine);
             }
         }
@@ -930,6 +930,90 @@ namespace LTSAPI.Controllers
             catch { }
             return new List<string>();
 
+        }
+
+        public async Task<HttpResponseMessage> UpdateNote(MessageNotes notes, string AnswerID, string ccUsername, string ccPassword)
+        {
+            HttpResponseMessage reponsemessage = new HttpResponseMessage();
+            try
+            {
+                HttpClient client = new HttpClient();
+                var serializeNote = JsonConvert.SerializeObject(notes);
+                string ccURLforAddNote = "https://api.getcloudcherry.com/api/Answers/Note/" + AnswerID;
+                HttpRequestMessage addNoteRequest = new HttpRequestMessage(HttpMethod.Post, new Uri(ccURLforAddNote));
+
+                //Get AccessToken from CC
+                string ccAccessToken = await getCCAccessToken(ccUsername, ccPassword);
+                addNoteRequest.Headers.Add("Authorization", "Bearer " + ccAccessToken);
+                addNoteRequest.Content = new StringContent(serializeNote, Encoding.UTF8, "application/json");
+
+                //Get Response from the CC API
+                HttpResponseMessage addNoteResponse = await client.SendAsync(addNoteRequest);
+                string addNoteRespContent = await addNoteResponse.Content.ReadAsStringAsync();
+                return addNoteResponse;
+            }
+            catch { }
+
+            reponsemessage.StatusCode = HttpStatusCode.BadRequest;
+            return reponsemessage;
+            
+        }
+
+        // Retreives Settings Data from CC
+        public  async Task<Dictionary<string,object>> GetSettings(string AccessToken)
+        {
+
+            try
+            {
+                string SettingURl = "/api/Settings";
+
+                string Settingsdata = await HttpGet(AccessToken, SettingURl);
+                if (Settingsdata != "") ;
+                return JsonConvert.DeserializeObject<Dictionary<string, object>>(Settingsdata);
+            }
+            catch { }
+            return new Dictionary<string, object>();
+
+        }
+        // calls any given HTTP Get CC URL
+        public async Task<string> HttpGet(string AccessToken,string CCURL)
+        {
+            try
+            {
+                string apiendpoint = "https://api.getcloudcherry.com";
+                var client = new HttpClient();
+                string url = apiendpoint + CCURL;
+                HttpRequestMessage queryrequest = new HttpRequestMessage(HttpMethod.Get, url);
+
+                //Add Bearer Token To Authenticate This Stateless Request
+                queryrequest.Headers.Add("Authorization", "Bearer " + AccessToken);
+                var queryresponse = await client.SendAsync(queryrequest);
+                var responseBody = await queryresponse.Content.ReadAsStringAsync();
+                return responseBody;
+            }
+            catch { }
+            return "";
+
+          
+          
+        }
+        // Retreives the Notification name  in CC  from which  target URL is called, respective targetURL is identified by 'Controllername'
+        public async Task<string> GetNotificationName(string AccessToken, string Controllername)
+        {
+            string NotificationTargetProperty = ConfigurationManager.AppSettings["NotificationTargetProperty"].ToString();
+            Dictionary<string, object> Settingsdata = await GetSettings(AccessToken);
+            List<Dictionary<string, object>> notificationsdata = JsonConvert.DeserializeObject<List<Dictionary<string, object>>>(Settingsdata["notifications"].ToString());
+
+            foreach (Dictionary<string, object> singlenotification in notificationsdata)
+            {
+                KeyValuePair<string, object> resultdata = singlenotification.Where(x => x.Key.ToString().ToLower() == NotificationTargetProperty.ToLower() && x.Value.ToString().ToLower().Contains(Controllername.ToLower())).SingleOrDefault();
+                if (resultdata.Key != null && resultdata.Value != null)
+                {
+                    return singlenotification["name"].ToString();
+                }
+
+            }
+         return "";
         }
     }
 }

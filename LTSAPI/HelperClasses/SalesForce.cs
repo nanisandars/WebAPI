@@ -114,7 +114,7 @@ namespace Cherry.HelperClasses
 
             using (System.IO.StreamWriter file = new System.IO.StreamWriter(logPath, true))
             {
-                file.WriteLine("Message :" + Errormessage + "<br/>" + Environment.NewLine + "Date :" + DateTime.Now.ToString());
+                file.WriteLine("Message :" + Errormessage  + Environment.NewLine + "Date :" + DateTime.Now.ToString());
                 file.WriteLine(Environment.NewLine + "-----------------------------------------------------------------------------" + Environment.NewLine);
             }
         }
