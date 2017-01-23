@@ -7,7 +7,6 @@ using System.Web.Http;
 using System.Threading.Tasks;
 using LTSAPI.Controllers;
 using LTSAPI.CC_Classes;
-using LTSAPI.FD_Classes;
 using Newtonsoft.Json;
 using System.Text;
 
@@ -33,7 +32,7 @@ namespace LTSAPI.Controllers
         [HttpGet]
         public async Task<int> getResponsesByRequeser(string ccAccessToken, string reqEmail, string reqMobile)
         {
-          
+            reqMobile = "+" + reqMobile;
             reqMobile = reqMobile.Trim().Replace(" ", "");
             double avgNPS = 0;
             try
@@ -52,7 +51,6 @@ namespace LTSAPI.Controllers
                 List<string> qtnTags = new List<string>() { "NAME", "EMAIL", "MOBILE", "NPS" };
                 qtnActive = qtnActive.Where(x => x.QuestionTags.Any(tag => qtnTags.Contains(tag.ToString().ToUpper()))).ToList();
 
-                string qtnIDName = "";
                 string qtnIDMobile = "";
                 string qtnIDEmail = "";
                 string qtnIDNPSTag = "";
@@ -62,12 +60,7 @@ namespace LTSAPI.Controllers
                     if (qtnInput.QuestionTags.Count == 1)
                     {
                         switch (qtnInput.QuestionTags.FirstOrDefault().ToString().ToUpper())
-                        {
-                            case "NAME":
-                                {
-                                    qtnIDName = qtnInput.Id;
-                                    break;
-                                }
+                        {                          
                             case "MOBILE":
                                 {
                                     qtnIDMobile = qtnInput.Id;

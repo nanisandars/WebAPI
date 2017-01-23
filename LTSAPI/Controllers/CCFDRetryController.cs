@@ -20,7 +20,7 @@ namespace LTSAPI.Controllers
 {
     public class CCFDRetryController : ApiController
     {
-        FreshDesk freshDesk = new FreshDesk();
+      
         CloudCherryController cloudCherryController = new CloudCherryController();
         SentryController sentry = new SentryController();
         FDCCController fdcc = new FDCCController();
@@ -35,6 +35,8 @@ namespace LTSAPI.Controllers
         [Route("api/CCFDRetry/GetCCNotesInsertRetryRecords")]
         public async Task<IHttpActionResult> getInsertNoteRetryRecords()
         {
+            string Exceptiondetails = "";
+            string ExceptiondetailsMSG = "";
             string ccusername = "";
             string apiKey = "";
             string httpResponse = "";
@@ -136,9 +138,15 @@ namespace LTSAPI.Controllers
             }
             catch (Exception ex)
             {
-                sentry.LogTheFailedRecord(ex.Message, "Unknown Exception", "", ExceptionType.Create, "", ccusername, IntegrationType.freshdesk);
+                Exceptiondetails = "Unknown";
+                ExceptiondetailsMSG = ex.Message;
+            }
+            if (Exceptiondetails == "Unknown")
+            {
+                await sentry.LogTheFailedRecord(ExceptiondetailsMSG, "Unknown Exception", "", ExceptionType.Create, "", ccusername, IntegrationType.freshdesk);
                 return BadRequest();
             }
+            return BadRequest();
         }
 
         #endregion
@@ -197,8 +205,7 @@ namespace LTSAPI.Controllers
                 string[] integrationdetails = doc["integrationDetails"].ToString().Split(splitstr);
                 FDAPIKey = integrationdetails[1];
                 FDURL = integrationdetails[0];
-                //string serviceEndPoint = FDURL + "/api/v2/tickets";
-                //string apiKey = FDAPIKey + ":X";
+               
 
                 System.Net.ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12 | SecurityProtocolType.Tls11 | SecurityProtocolType.Tls;
                 //Get the token details of the salesforce              
@@ -306,7 +313,7 @@ namespace LTSAPI.Controllers
                     return msg;
                 }
 
-                FreshDesk frshDesk = new FreshDesk();
+               
 
                 Dictionary<string, object> Userdata = cloudCherryController.GetUserCredentials(userName, IntegrationType.freshdesk);
                 CCApikey = Userdata["ccapikey"].ToString();
@@ -349,7 +356,7 @@ namespace LTSAPI.Controllers
                                 return msg;
                             }
 
-                           // string CCTicketId = "";
+                        
 
                             //Declaring the notes object
                             StringBuilder noteStructure = new StringBuilder();
@@ -407,7 +414,7 @@ namespace LTSAPI.Controllers
             try
             {
                 HttpClient client = new HttpClient();
-                FreshDesk freshDesk = new FreshDesk();
+              
                 client.Timeout = TimeSpan.FromSeconds(10);
                 Dictionary<string, object> Userdata = cloudCherryController.GetUserCredentials(userName, IntegrationType.freshdesk);
                 
@@ -489,7 +496,7 @@ namespace LTSAPI.Controllers
             List<string> Usernamelist = new List<string>();
             Dictionary<string, object> repeatedUsernamelist = new Dictionary<string, object>();
             List<Dictionary<string, object>> Alluserdata = await sentry.GetAllUserData(integrationType);
-            bool Isusersrepeated = false;
+          
             foreach (Dictionary<string, object> singeluserdata in Alluserdata)
             {
                 Dictionary<string, object> metadata = JsonConvert.DeserializeObject<Dictionary<string, object>>(singeluserdata["metadata"].ToString());

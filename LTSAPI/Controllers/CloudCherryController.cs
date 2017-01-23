@@ -876,7 +876,7 @@ namespace LTSAPI.Controllers
             List<string> finallist = new List<string>();
             try
             {
-                // string accessToken = await getCCAccessToken();
+               
                 if (accessToken == null || accessToken == "")
                 {
                     finallist.Add("Error:Unable to connect to Cloudcherry");
@@ -968,7 +968,7 @@ namespace LTSAPI.Controllers
                 string SettingURl = "/api/Settings";
 
                 string Settingsdata = await HttpGet(AccessToken, SettingURl);
-                if (Settingsdata != "") ;
+                if (Settingsdata != "") 
                 return JsonConvert.DeserializeObject<Dictionary<string, object>>(Settingsdata);
             }
             catch { }

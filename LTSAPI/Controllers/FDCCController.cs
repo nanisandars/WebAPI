@@ -14,7 +14,6 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Web.Http;
 using LTSAPI.HelperClasses;
-using LTSAPI.FD_Classes;
 using System.Net.Security;
 
 /* This is used to get and update information between the systems */
@@ -23,8 +22,6 @@ namespace LTSAPI.Controllers
 {
     public class FDCCController : ApiController
     {
-        //Sentry 
-        string previousissueid = "";
         //Gets the FD integration key from config file
         CloudCherryController cloudCherryController = new CloudCherryController();
         string FDSettingsPath = ConfigurationManager.AppSettings["Credentials"];
@@ -32,9 +29,6 @@ namespace LTSAPI.Controllers
         string ExceptionRaisedMessage = "";
         SentryController sentry = new SentryController();
         //Gets User's data from the FD JSON File
-
-        FreshDesk freshDesk = new FreshDesk();
-        IntegrationType integrationType = IntegrationType.freshdesk;
 
 
 
@@ -235,7 +229,7 @@ namespace LTSAPI.Controllers
                     CCFDdata.Add("Error", "");
                 }
 
-                //CCFDdata.Add("CCTag", CCTag);
+                
                 return CCFDdata;
             }
             catch (Exception ex)
@@ -397,8 +391,6 @@ namespace LTSAPI.Controllers
                 if (ccData.answer != null)
                 {
                     //Gets the CC SURVEY data from the users of CC
-
-                    //Logs the cc user's survey response 
                     surveydata = JsonConvert.SerializeObject(ccData.answer);
                     //await sentry.LogTheResponseRecord("Logging whenever data received from CC", "Log", surveydata, DateTime.Now.ToString(), "ResponseLog", ccData.answer.id, ccUserName, integrationType);
 
@@ -472,19 +464,8 @@ namespace LTSAPI.Controllers
                     responseBody = responseBody.Replace("'{", "{");
                     responseBody = responseBody.Replace("}'", "}");
                     responseBody = responseBody.Replace("'", "\"");
-                    List<string> defaultTags = new List<string>() { "NAME", "EMAIL", "MOBILE", "SUBJECT", "DESCRIPTION" };
-                    if (responseBody == "null")
-                    {
-                        string strTags = "";
-                        foreach (string tag in defaultTags)
-                        {
-                            strTags = strTags + tag + " ,";
-                        }
-                        await sentry.LogTheFailedRecord("Default mappings are not found for this user.", "Token", "", ExceptionType.General, ccData.answer.id, ccUserName, IntegrationType.freshdesk);
 
-                       msg.StatusCode = HttpStatusCode.OK;
-                        return msg;
-                    }
+       
                     var Integrationdata = JsonConvert.DeserializeObject<Dictionary<string, object>>(responseBody);
 
                     List<Dictionary<string, object>> objMappings = JsonConvert.DeserializeObject<List<Dictionary<string, object>>>(Integrationdata["mappings"].ToString());
@@ -500,7 +481,6 @@ namespace LTSAPI.Controllers
 
                     Dictionary<string, object> IntegrationData = cloudCherryController.GetUserCredentials(ccData.answer.user.ToString(), IntegrationType.freshdesk);
                     CCApikey = IntegrationData["ccapikey"].ToString();
-                    //string accessToken = await cloudCherryController.getCCAccessToken(ccData.answer.user.ToString(), CCApikey);                      
                     List<Question> questionList = await cloudCherryController.GetQuestions(ccAccessToken).ConfigureAwait(false);
 
 
@@ -516,40 +496,30 @@ namespace LTSAPI.Controllers
                             {
                                 case "EMAIL":
                                     {
-                                        if (tagListInCaps.Contains(map["Tag"].ToString().ToUpper()))
-                                            defaultTags.Remove("EMAIL");
                                         isRequesterField = true;
                                         reqEmail = getValueByQId(ccData, Qid, questionList).ToString();
                                         break;
                                     }
                                 case "MOBILE":
                                     {
-                                        if (tagListInCaps.Contains(map["Tag"].ToString().ToUpper()))
-                                            defaultTags.Remove("MOBILE");
                                         isRequesterField = true;
                                         reqMobile = getValueByQId(ccData, Qid, questionList).ToString();
                                         break;
                                     }
                                 case "NAME":
                                     {
-                                        if (tagListInCaps.Contains(map["Tag"].ToString().ToUpper()))
-                                            defaultTags.Remove("NAME");
                                         isRequesterField = true;
                                         reqName = getValueByQId(ccData, Qid, questionList, "NAME").ToString();
                                         break;
                                     }
                                 case "SUBJECT":
                                     {
-                                        if (tagListInCaps.Contains(map["Tag"].ToString().ToUpper()))
-                                            defaultTags.Remove("SUBJECT");
                                         isRequesterField = true;
                                         ticketSubject = getValueByQId(ccData, Qid, questionList).ToString();
                                         break;
                                     }
                                 case "DESCRIPTION":
                                     {
-                                        if (tagListInCaps.Contains(map["Tag"].ToString().ToUpper()))
-                                            defaultTags.Remove("DESCRIPTION");
                                         isRequesterField = true;
                                         ticketDescription = getValueByQId(ccData, Qid, questionList).ToString();
                                         break;
@@ -564,18 +534,6 @@ namespace LTSAPI.Controllers
                                 jsonmap.Add(Field, getValueByQId(ccData, Qid, questionList, map["Tag"].ToString().ToUpper()));
                         }
 
-                        if (defaultTags.Count != 0)
-                        {
-                            string strTags = "";
-                            foreach (string tag in defaultTags)
-                            {
-                                strTags = strTags + tag + " ,";
-                            }
-                            if (await sentry.LogTheFailedRecord("No Default tags were provided", "While creation of ticket", "", ExceptionType.General, ccData.answer.id, ccUserName, IntegrationType.freshdesk)) ;
-
-                            msg.StatusCode = HttpStatusCode.OK;
-                            return msg;
-                        }
 
                         string nps = "";
                         string errorMessage = "";
@@ -599,7 +557,7 @@ namespace LTSAPI.Controllers
                         string notificationname = "";
                         if (locationSplits != null && locationSplits.Length>0 )
                         {
-                            notificationname = locationSplits[locationSplits.Length-1];
+                            notificationname = locationSplits[locationSplits.Length-1].Trim();
                         }
                         string tempvariable = notificationname.ToLower().Replace("matched", "").Trim();
                         notificationname = notificationname.Substring(0, tempvariable.Length);
@@ -720,7 +678,7 @@ namespace LTSAPI.Controllers
                
                  locationName = notificationData.answer.locationId == null ? "All Locations" : notificationData.answer.locationId;
 
-                //Response response in notificationData.answer.responses)
+               
                 for (int counter = 0; counter < notificationData.answer.responses.Count; counter++)
                 {
                     string ansValue = (notificationData.answer.responses[counter].TextInput == null) || (notificationData.answer.responses[counter].TextInput.Trim() == "") ? notificationData.answer.responses[counter].NumberInput.ToString() : notificationData.answer.responses[counter].TextInput;
@@ -853,8 +811,8 @@ namespace LTSAPI.Controllers
                                 fields = fields + "  " + errField.Key;
                             }
                             string FDTicketId = GetFDTicketNumberByResponseMsg(responseFDRemoveErrFieldsMsg);
-                          await  CreatenoteOnTicketCreation(FDURL, FDTicketId, userName, CCapiKey, ansID);
-                            bool flag = await sentry.LogThePartialSuccessRecord(ansID, DateTime.Now.ToString(), fields, JsonConvert.SerializeObject(removedFields), responseFDRemoveErrFieldsMsg, FDTicketId, ExceptionType.FieldLevel, userName, IntegrationType.freshdesk);
+                            await CreatenoteOnTicketCreation(FDURL, FDTicketId, userName, CCapiKey, ansID);
+                            bool flag = await sentry.LogThePartialSuccessRecord(ansID, DateTime.Now.ToString(), fields, JsonConvert.SerializeObject(removedFields), JsonConvert.SerializeObject(removedFields), FDTicketId, ExceptionType.FieldLevel, userName, IntegrationType.freshdesk);
                             if (flag)
                                 return true;
                         }
@@ -956,9 +914,7 @@ namespace LTSAPI.Controllers
                 string[] integrationdetails = Userdata["integrationDetails"].ToString().Split(splitstr);
                 FDAPIKey = integrationdetails[1];
                 FDURL = integrationdetails[0];
-                //Dictionary<string, object> doc = cloudCherryController.GetUserCredentials("ccapikey", ccapikey, ref UserName);
-                //freshDesk.SetUserCredentials(doc, ref  FDAPIKey, ref FDURL, ref ccapikey);
-
+               
                 //Specifying the add Note URL at CC
                 string ccURLforAddNote = "https://api.getcloudcherry.com/api/Answers/Note/" + CCTicketId;
                 HttpRequestMessage addNoteRequest = new HttpRequestMessage(HttpMethod.Post, new Uri(ccURLforAddNote));
@@ -1007,7 +963,7 @@ namespace LTSAPI.Controllers
             Dictionary<string, object> Integrationdata = cloudCherryController.GetUserCredentials(Username, IntegrationType.freshdesk);
             List<string> defaultTags = new List<string>() { "NAME", "EMAIL", "MOBILE", "SUBJECT", "DESCRIPTION", "NPS" };
             CCApikey = Integrationdata["ccapikey"].ToString();
-            //  freshDesk.SetUserCredentials(doc, ref  FDAPIKey, ref FDURL, ref  CCApikey);
+           
             string accessToken = await cloudCherryController.getCCAccessToken(Username, CCApikey);
             List<string> ExistingTags = await cloudCherryController.GetTagonEditbyQuestion(Questionid, accessToken);
             List<string> FinalList = new List<string>();

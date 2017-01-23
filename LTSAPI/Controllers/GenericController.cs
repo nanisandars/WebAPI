@@ -19,7 +19,7 @@ namespace LTSAPI.Controllers
     {
         SentryController sentry = new SentryController();
         CloudCherryController cloudCherryController = new CloudCherryController();
-        FreshDesk freshDesk = new FreshDesk();
+       
 
         [HttpPost]
         [Route("api/Generic/AddATicket")]

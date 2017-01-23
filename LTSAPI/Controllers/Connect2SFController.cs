@@ -62,7 +62,7 @@ namespace LTSAPI.Controllers
                 await cloudCherryController.Insertmapping(tagid, TagName, "", Field, "False", "", CCAccessToken, SFKey);
 
             }
-            catch (Exception ex) { LogThisError(ex.Message); }
+            catch (Exception ex) {  }
 
         }
 
@@ -100,7 +100,7 @@ namespace LTSAPI.Controllers
                 return await cloudCherryController.GetTagQuestions(Tag, Access_token);
 
             }
-            catch (Exception ex) { LogThisError(ex.Message); }
+            catch (Exception ex) {  }
             return "";
         }
 
@@ -112,7 +112,7 @@ namespace LTSAPI.Controllers
                 return await cloudCherryController.GetSingleTagQuestionID(Tag, Access_token);
 
             }
-            catch (Exception ex) { LogThisError(ex.Message); }
+            catch (Exception ex) {  }
             return "";
         }
 
@@ -127,7 +127,7 @@ namespace LTSAPI.Controllers
                         return q.QuestionTags[0];
                 }
             }
-            catch (Exception ex) { LogThisError(ex.Message); }
+            catch (Exception ex) {  }
             return Questionlist;
         }
 
@@ -142,7 +142,7 @@ namespace LTSAPI.Controllers
                         return q.QuestionTags[0]; ;
                 }
             }
-            catch (Exception ex) { LogThisError(ex.Message); }
+            catch (Exception ex) {  }
             return "";
         }
 
@@ -183,7 +183,7 @@ namespace LTSAPI.Controllers
                     return finallist;
                 }
             }
-            catch (Exception ex) { LogThisError(ex.Message); }
+            catch (Exception ex) {  }
             return null;
         }
 
@@ -204,11 +204,11 @@ namespace LTSAPI.Controllers
                 System.Net.ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12 | SecurityProtocolType.Tls11 | SecurityProtocolType.Tls;
 
                 var postCrendentials = new[] {
-new KeyValuePair<string,string>("grant_type","refresh_token"),
-new KeyValuePair<string,string>("client_id", clientid),    
-new KeyValuePair<string,string>("client_secret", secret),  
-new KeyValuePair<string,string>("refresh_token", refreshtoken)
-};
+                        new KeyValuePair<string,string>("grant_type","refresh_token"),
+                        new KeyValuePair<string,string>("client_id", clientid),    
+                        new KeyValuePair<string,string>("client_secret", secret),  
+                        new KeyValuePair<string,string>("refresh_token", refreshtoken)
+                                        };
 
                 HttpRequestMessage req = new HttpRequestMessage(HttpMethod.Post, new Uri(authEndPoint));
                 req.Content = new FormUrlEncodedContent(postCrendentials);
@@ -227,7 +227,7 @@ new KeyValuePair<string,string>("refresh_token", refreshtoken)
                 }
                 return SFdetails;
             }
-            catch (Exception ex) { LogThisError(ex.Message); }
+            catch (Exception ex) { }
             return new List<string>();
 
         }
@@ -242,7 +242,7 @@ new KeyValuePair<string,string>("refresh_token", refreshtoken)
                 return await cloudCherryController.GetQuestions(Access_token);
 
             }
-            catch (Exception ex) { LogThisError(ex.Message); }
+            catch (Exception ex) {  }
             return new List<Question>();
         }
 
@@ -256,7 +256,7 @@ new KeyValuePair<string,string>("refresh_token", refreshtoken)
                 return await cloudCherryController.GetTagFieldMapping(Username, password, SFKey);
 
             }
-            catch (Exception ex) { LogThisError(ex.Message); }
+            catch (Exception ex) {  }
             return null;
         }
 
@@ -282,7 +282,7 @@ new KeyValuePair<string,string>("refresh_token", refreshtoken)
             {
                 return await cloudCherryController.GetQuestionsTags(Access_token);
             }
-            catch (Exception ex) { LogThisError(ex.Message); }
+            catch (Exception ex) {  }
             return new List<string>();
         }
 
@@ -296,7 +296,7 @@ new KeyValuePair<string,string>("refresh_token", refreshtoken)
                 return await cloudCherryController.GetQuestionsTagsandId(Access_token);
 
             }
-            catch (Exception ex) { LogThisError(ex.Message); }
+            catch (Exception ex) {  }
             return new List<Dictionary<string, object>>();
         }
 
@@ -327,12 +327,12 @@ new KeyValuePair<string,string>("refresh_token", refreshtoken)
                 System.Net.ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12 | SecurityProtocolType.Tls11 | SecurityProtocolType.Tls;
 
                 var postCrendentials = new[] {
-new KeyValuePair<string,string>("grant_type","password"),
-new KeyValuePair<string,string>("client_id", ClientId),   
-new KeyValuePair<string,string>("client_secret", ConsumerSecret),
-new KeyValuePair<string,string>("username",UserName),
-new KeyValuePair<string,string>("password",Password)
-};
+                    new KeyValuePair<string,string>("grant_type","password"),
+                    new KeyValuePair<string,string>("client_id", ClientId),   
+                    new KeyValuePair<string,string>("client_secret", ConsumerSecret),
+                    new KeyValuePair<string,string>("username",UserName),
+                    new KeyValuePair<string,string>("password",Password)
+                    };
 
                 HttpRequestMessage req = new HttpRequestMessage(HttpMethod.Post, new Uri(authEndPoint));
                 req.Content = new FormUrlEncodedContent(postCrendentials);
@@ -365,13 +365,14 @@ new KeyValuePair<string,string>("password",Password)
             {
                 HttpClient client = new HttpClient();
 
-                string serviceEndPoint = instanceurl + "/services/apexrest/CCService/getCaseFields";
+                string serviceEndPoint = instanceurl + "/services/apexrest/Cloudcherry_1/CCService/getCaseFields";
 
                 HttpRequestMessage req = new HttpRequestMessage(HttpMethod.Get, new Uri(serviceEndPoint));
                 req.Headers.Add("Authorization", "Bearer " + accessToken);
 
                 HttpResponseMessage response = await client.SendAsync(req);
-                if (!response.IsSuccessStatusCode)
+                string errMsg = await response.Content.ReadAsStringAsync();
+                    if (!response.IsSuccessStatusCode)
                 {
                     fields.Add("Unsupported Client");
                     return fields;
@@ -398,7 +399,7 @@ new KeyValuePair<string,string>("password",Password)
             }
             catch (Exception ex)
             {
-                LogThisError(ex.Message);
+                
                 fields = new List<string>();
                 fields.Add(ex.Message);
                 return fields;
@@ -433,6 +434,8 @@ new KeyValuePair<string,string>("password",Password)
                 InstanceUrl = Exceptiondata["instanceurl"].ToString();
                 apiKey = Exceptiondata["apikey"].ToString();
                
+
+
                 //Checks whether the CC user's SF details are existed in DB or not
                 if (Clientid == "")
                 {
@@ -442,9 +445,6 @@ new KeyValuePair<string,string>("password",Password)
                 else if (Secret == "")
                 {
                     await sentry.LogTheFailedRecord("SecretKey is not found for this user.", "Token", "", ExceptionType.General, surveyData.answer.id, ccusername, IntegrationType.salesforce);
-
-
-
                     return Ok();
                 }
                 else if (RefreshToken == "")
@@ -488,6 +488,7 @@ new KeyValuePair<string,string>("password",Password)
                         string F1 = Field.ToString();
                         string Qid = map["qid"].ToString();
                         string tag = map["tag"].ToString();
+                      
                         if (map["disabled"].ToString() == "True")
                             continue;
                         foreach (var res in surveyData.answer.responses)
@@ -502,7 +503,7 @@ new KeyValuePair<string,string>("password",Password)
 
                     if (jsonmap.Count == 0)
                     {
-                        LogThisError("No Field mappings were found while  inserting ticket into SF.");
+                      
                         await sentry.LogTheFailedRecord("No Insert Field Mapping  Found / No Input was given by the User.", "Token", "", ExceptionType.General, surveyData.answer.id, ccusername, IntegrationType.salesforce);
 
                         return BadRequest();
@@ -511,13 +512,13 @@ new KeyValuePair<string,string>("password",Password)
                     //Passing default values to insert a CASE object in SF
                     jsonmap.Add("Status", "New");
                     jsonmap.Add("Origin", "Web");
-                    jsonmap.Add("CCTicket__c", surveyData.answer.id); //Sending Unique Identifier to SF [AnswerID]
+                    jsonmap.Add("Cloudcherry_1__CCTicket__c", surveyData.answer.id); //Sending Unique Identifier to SF [AnswerID]
 
                     //Converting mapping object into json
                     obj = JsonConvert.SerializeObject(jsonmap);
 
                     //Specifying the SF API to insert CASE
-                    string serviceEndPoint = InstanceUrl + "/services/apexrest/CCService/insertCCTicket";
+                    string serviceEndPoint = InstanceUrl + "/services/apexrest/Cloudcherry_1/CCService/insertCCTicket";
                     HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Post, new Uri(serviceEndPoint));
                     request.Headers.Add("Authorization", "Bearer " + tokendetails[0]);
                     request.Content = new StringContent(obj, Encoding.UTF8, "application/json");
@@ -610,7 +611,7 @@ new KeyValuePair<string,string>("password",Password)
                 else
                 {
                    
-                    LogThisError("No Field mappings were found while  inserting ticket into SF.");
+                  
                     await sentry.LogTheFailedRecord("No Insert Field Mapping Found for this USER.", "Token", "", ExceptionType.General, surveyData.answer.id, ccusername, IntegrationType.salesforce);
                     return BadRequest();
                 }
@@ -626,9 +627,9 @@ new KeyValuePair<string,string>("password",Password)
             {
                 ExceptionRaised = "Unknown";
                 ExceptionRaisedMessage = ex.Message;
-                //logthisfailedrecord(ex, "Unknown Exception", "", ExceptionType.General, surveyData.answer.id, ccusername, IntegrationType.salesforce);
-                //return BadRequest();
+               
             }
+
             if (ExceptionRaised == "Timeout")
             {
                 await sentry.LogTheFailedRecord(ExceptionRaisedMessage, "TimedOut Exception", "", ExceptionType.Create, surveyData.answer.id, ccusername, IntegrationType.salesforce);
@@ -640,6 +641,8 @@ new KeyValuePair<string,string>("password",Password)
                 await sentry.LogTheFailedRecord(ExceptionRaisedMessage, "Unknown Exception", "", ExceptionType.General, surveyData.answer.id, ccusername, IntegrationType.salesforce);
             
             }
+
+
             return Ok();
         }
         async Task<HttpResponseMessage> CreatenoteOnTicketCreation(string CaseDetails, string ccUserName, string CCApikey, string Answerid)
@@ -655,19 +658,8 @@ new KeyValuePair<string,string>("password",Password)
             {
                 return new HttpResponseMessage();
             }
-        }   
-
-        public void LogThisError(string Errormessage)
-        {
-            string logPath = System.Configuration.ConfigurationManager.AppSettings["logFilePath"];
-            logPath = HttpContext.Current.Server.MapPath("~/" + logPath);
-            using (System.IO.StreamWriter file = new System.IO.StreamWriter(logPath, true))
-            {
-
-                file.WriteLine("Message :" + Errormessage + "<br/>" + Environment.NewLine + "Date :" + DateTime.Now.ToString());
-                file.WriteLine(Environment.NewLine + "-----------------------------------------------------------------------------" + Environment.NewLine);
-            }
         }
+   
 
         //Retreives all the user credentials that are logged in setting.json file during authentication
         public List<Dictionary<string, object>> GetClientCredentials()
@@ -710,7 +702,7 @@ new KeyValuePair<string,string>("password",Password)
             List<string> finallist = new List<string>();
             try
             {
-                // string accessToken = await getCCAccessToken();
+             
                 if (accessToken == null || accessToken == "")
                 {
                     finallist.Add("Error:Unable to connect to Cloudcherry");
@@ -781,16 +773,11 @@ new KeyValuePair<string,string>("password",Password)
                 {
                     StringBuilder propertiesNote = new StringBuilder();
 
-                    if (res.Key == "CCTicket__c")
+                    if (res.Key == "Cloudcherry_1__CCTicket__c")
                     {
                         CCTicketId = Convert.ToString(res.Value);
                     }
-                    else if (res.Key == "LastUpdatedOn__c")
-                    {
-                        // noteStructure.Append(res.Key + ":" + res.Value + "      ");
-                        notes.noteTime = res.Value.ToString();
-                    }
-                    else if (res.Key == "apiKey")
+                    else if (res.Key == "Cloudcherry_1__apiKey")
                     {
                         apiKey = res.Value.ToString();
                     }
@@ -956,12 +943,12 @@ new KeyValuePair<string,string>("password",Password)
                 System.Net.ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12 | SecurityProtocolType.Tls11 | SecurityProtocolType.Tls;
 
                 var postCrendentials = new[] {
-new KeyValuePair<string,string>("grant_type","authorization_code"),
-new KeyValuePair<string,string>("client_id", Clientid),    
-new KeyValuePair<string,string>("client_secret", Secret),  
-new KeyValuePair<string,string>("redirect_uri", System.Configuration.ConfigurationManager.AppSettings["SFCallbackURL"]),
-new KeyValuePair<string,string>("code",code)
-};
+                new KeyValuePair<string,string>("grant_type","authorization_code"),
+                new KeyValuePair<string,string>("client_id", Clientid),    
+                new KeyValuePair<string,string>("client_secret", Secret),  
+                new KeyValuePair<string,string>("redirect_uri", System.Configuration.ConfigurationManager.AppSettings["SFCallbackURL"]),
+                new KeyValuePair<string,string>("code",code)
+                };
 
                 HttpRequestMessage req = new HttpRequestMessage(HttpMethod.Post, new Uri(authEndPoint));
                 req.Content = new FormUrlEncodedContent(postCrendentials);
@@ -1033,7 +1020,7 @@ new KeyValuePair<string,string>("code",code)
                 response2.Headers.Location = new Uri(SettingsUrl);
                 return response2;
             }
-            catch (Exception ex) { objc.LogThisError(ex.Message); }
+            catch (Exception ex) {  }
             return new HttpResponseMessage();
         }
 

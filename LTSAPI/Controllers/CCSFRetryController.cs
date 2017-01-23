@@ -77,8 +77,8 @@ namespace LTSAPI.Controllers
         public async Task<IHttpActionResult> getInsertNoteRetryRecords()
         {
 
-
-            string Temporaryvar = "";
+            string Exceptionmsg = "";
+            string Exceptiondata = "";          
             string ccusername = "";
             string apiKey = "";
             string httpResponse = "";
@@ -183,9 +183,16 @@ namespace LTSAPI.Controllers
             }
             catch (Exception ex)
             {
-                sentry.LogTheFailedRecord(ex.Message, "Unknown Exception", "", ExceptionType.Update, "", ccusername, IntegrationType.salesforce);
+                Exceptiondata = "Unknown";
+                Exceptionmsg = ex.Message;
+            }
+            if (Exceptiondata == "Unknown")
+            {
+              await  sentry.LogTheFailedRecord(Exceptionmsg, "Unknown Exception", "", ExceptionType.Update, "", ccusername, IntegrationType.salesforce);
                 return BadRequest();
             }
+
+            return BadRequest();
         }
 
         #endregion
@@ -235,7 +242,7 @@ namespace LTSAPI.Controllers
                 HttpClient client = new HttpClient();
                 client.Timeout = TimeSpan.FromSeconds(10);
                 //Specifying the INSERT API at SF
-                string serviceEndPoint = "/services/apexrest/CCService/insertCCTicket";
+                string serviceEndPoint = "/services/apexrest/Cloudcherry_1/CCService/insertCCTicket";
                 Dictionary<string, object> exceptiondata = cloudCherryController.getClientsettingsByKey("username", userName, IntegrationType.salesforce);
                 if (exceptiondata == null)
                 {
@@ -266,7 +273,7 @@ namespace LTSAPI.Controllers
                 msg.StatusCode = HttpStatusCode.OK;
 
                 if (!Integrationdata.Keys.Contains(exceptionType))
-                    return msg; //new List<Dictionary<string, object>>();
+                    return msg; 
                 List<Dictionary<string, object>> Exceptiondata = JsonConvert.DeserializeObject<List<Dictionary<string, object>>>(Integrationdata[exceptionType].ToString());
 
                 Dictionary<string, object> doc = cloudCherryController.GetUserCredentials(userName, IntegrationType.salesforce);
@@ -435,16 +442,16 @@ namespace LTSAPI.Controllers
                                 foreach (var res in ticketDocument)
                                 {
                                     StringBuilder propertiesNote = new StringBuilder();
-                                    if (res.Key == "CCTicket__c")
+                                    if (res.Key == "Cloudcherry_1__CCTicket__c")
                                     {
                                         CCTicketId = Convert.ToString(res.Value);
                                     }
 
                                     else
                                     {
-                                        if ((!(res.Key == "attributes")) && (!(res.Key == "apiKey")))
+                                        if ((!(res.Key == "attributes")) && (!(res.Key == "Cloudcherry_1__apiKey")))
                                         {
-                                            propertiesNote.Append(res.Key + ":" + res.Value + "      ");
+                                            propertiesNote.Append(res.Key + ":" + res.Value + "      " + "\\n" + "      ");
                                         }
                                     }
                                     noteStructure.Append(propertiesNote);
@@ -512,9 +519,6 @@ namespace LTSAPI.Controllers
                 Dictionary<string, object> metadata = JsonConvert.DeserializeObject<Dictionary<string, object>>(singeluserdata["metadata"].ToString());
 
                 string responseBody = metadata["value"].ToString();
-                //{"sanlexicion":{"Salesforce":{"Resp
-
-
                 int firstindex = responseBody.IndexOf(":"); ;
                 responseBody = responseBody.Substring(0, firstindex);
                 responseBody = responseBody.Replace("{", "");
@@ -557,7 +561,7 @@ namespace LTSAPI.Controllers
         public async Task FindRepeatedusers()
         {
             Task.Delay(3000);
-         //   Thread.Sleep(3000);
+        
             List<string> Usernamelist = new List<string>();
             Dictionary<string, object> repeatedUsernamelist = new Dictionary<string, object>();
             List<Dictionary<string, object>> Alluserdata = await sentry.GetAllUserData(integrationType);
@@ -567,9 +571,6 @@ namespace LTSAPI.Controllers
                 Dictionary<string, object> metadata = JsonConvert.DeserializeObject<Dictionary<string, object>>(singeluserdata["metadata"].ToString());
 
                 string responseBody = metadata["value"].ToString();
-                //{"sanlexicion":{"Salesforce":{"Resp
-
-
                 int firstindex = responseBody.IndexOf(":"); ;
                 responseBody = responseBody.Substring(0, firstindex);
                 responseBody = responseBody.Replace("{", "");
@@ -593,10 +594,6 @@ namespace LTSAPI.Controllers
                     Usernamelist.Add(username);
                 }
 
-                // await retryFailedRecordsSFInsert(responseBody, "Salesforce");
-                Task.Delay(3000);
-                // await retryFailedRecordsCCInsert(responseBody, "Salesforce");
-                Task.Delay(3000);
             }
             if (Isusersrepeated)
             {
@@ -671,7 +668,7 @@ namespace LTSAPI.Controllers
                 await sentry.InsertAnIssue(Finalsingleuserdata, integrationType);
                 Task.Delay(3000);
 
-            }//  foreach (KeyValuePair<string, object> KPusername
+            }
 
         }
 
@@ -682,7 +679,7 @@ namespace LTSAPI.Controllers
             {
                 HttpClient client = new HttpClient();
                 client.Timeout = TimeSpan.FromSeconds(10);
-                string serviceEndPoint = "/services/apexrest/CCService/insertCCTicket";
+                string serviceEndPoint = "/services/apexrest/Cloudcherry_1/CCService/insertCCTicket";
                 Dictionary<string, object> exceptiondata = cloudCherryController.getClientsettingsByKey("username", userName, IntegrationType.salesforce);
                 if (exceptiondata == null)
                     return null;
@@ -801,14 +798,14 @@ namespace LTSAPI.Controllers
                             StringBuilder noteStructure = new StringBuilder();
                             foreach (var res in ticketDocument)
                             {
-                                if (res.Key == "CCTicket__c")
+                                if (res.Key == "Cloudcherry_1__CCTicket__c")
                                 {
                                     CCTicketId = Convert.ToString(res.Value);
                                 }
 
                                 else
                                 {
-                                    if ((!(res.Key == "attributes")) && (!(res.Key == "apiKey")))
+                                    if ((!(res.Key == "attributes")) && (!(res.Key == "Cloudcherry_1__apiKey")))
                                     {
                                         propertiesNote.Append(res.Key + ":" + res.Value + "      ");
                                     }
@@ -827,7 +824,7 @@ namespace LTSAPI.Controllers
                             string responseCase = await insertCaseResponse.Content.ReadAsStringAsync();
                             if (insertCaseResponse.StatusCode != HttpStatusCode.OK)
                             {
-                                // var isDeleted = failedCollection.DeleteOne(record); //Deleting the record from DB.
+                               
 
                                 Exceptiondatacopy.Add(sentry.RenewthisRecord(record["FailedRecord"].ToString() + "      " + responseCase, DateTime.Now.ToString(), "SFCC", record["FailedRecord"].ToString(), ExceptionType.Update, "", userName));
                                 isexist = true;
@@ -891,7 +888,7 @@ namespace LTSAPI.Controllers
                 if (tokendetails == null)
                     return BadRequest();
 
-                string updateFailRecordsQuery = "/services/data/v20.0/query/?q=SELECT FailedRecord__c,ExceptionDescription__c,ExceptionRaisedAt__c,ExceptionRaisedOn__c,ExceptionType__c,apiKey__c  FROM CC_Update_Fail_Log__c";
+                string updateFailRecordsQuery = "/services/data/v20.0/query/?q=SELECT Cloudcherry_1__FailedRecord__c, Cloudcherry_1__ExceptionDescription__c, Cloudcherry_1__ExceptionRaisedAt__c, Cloudcherry_1__ExceptionRaisedOn__c, Cloudcherry_1__ExceptionType__c, Cloudcherry_1__apiKey__c  FROM Cloudcherry_1__CC_Update_Fail_Log__c";
 
                 HttpClient httpClient = new HttpClient();
                 httpClient.Timeout = TimeSpan.FromSeconds(10);
