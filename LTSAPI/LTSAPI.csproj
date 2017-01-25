@@ -168,12 +168,14 @@
     <Compile Include="Controllers\CCFDRetryController.cs" />
     <Compile Include="Controllers\CCSFRetryController.cs" />
     <Compile Include="Controllers\CCTOSFController.cs" />
+    <Compile Include="Controllers\CCZDRetryController.cs" />
     <Compile Include="Controllers\CloudCherryController.cs" />
     <Compile Include="Controllers\Connect2SFController.cs" />
     <Compile Include="Controllers\FDCCController.cs" />
     <Compile Include="Controllers\GenericController.cs" />
     <Compile Include="Controllers\LandingController.cs" />
     <Compile Include="Controllers\SentryController.cs" />
+    <Compile Include="Controllers\ZendeskCCController.cs" />
     <Compile Include="FD_Classes\FDTicket.cs" />
     <Compile Include="Global.asax.cs">
       <DependentUpon>Global.asax</DependentUpon>
