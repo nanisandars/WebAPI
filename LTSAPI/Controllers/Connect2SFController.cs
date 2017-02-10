@@ -32,7 +32,7 @@ namespace LTSAPI.Controllers
         string InstanceUrl = "";
         string ccusername = "";
         string Error = "";
-        private string SFKey = ConfigurationManager.AppSettings["SFKey"];
+        private string SFKey = ConfigurationManager.AppSettings["salesforce"];
         string SettingsUrl = ConfigurationManager.AppSettings["UIURL"];
 
         IntegrationType integrationType = IntegrationType.salesforce;
@@ -391,7 +391,7 @@ new KeyValuePair<string,string>("password",Password)
                     }
 
 
-                    return fields;
+                    return fields.OrderBy(item=>item.ToString()).ToList();
                 }
                 else
                     return null;
@@ -420,19 +420,19 @@ new KeyValuePair<string,string>("password",Password)
                 string serializeSurveyData = JsonConvert.SerializeObject(surveyData.answer);
                 Dictionary<string, object> Exceptiondata = cloudCherryController.getClientsettingsByKey("username", ccusername, IntegrationType.salesforce);
 
+                //Checks whether the CC user has authenticated with SF or not
+                if (Exceptiondata == null)
+                {
+                    await sentry.LogTheFailedRecord("Authentication with SF has not happened yet for this user.", "Token", "", ExceptionType.General, surveyData.answer.id, ccusername, IntegrationType.salesforce);
+                    return Ok();
+                }
+
                 Clientid = Exceptiondata["clientid"].ToString();
                 Secret = Exceptiondata["secret"].ToString();
                 RefreshToken = Exceptiondata["rtoken"].ToString();
                 InstanceUrl = Exceptiondata["instanceurl"].ToString();
                 apiKey = Exceptiondata["apikey"].ToString();
-                //Checks whether the CC user has authenticated with SF or not
-                if (Exceptiondata == null)
-                {
-                    sentry.LogTheFailedRecord("Authentication with SF has not happened yet for this user.", "Token", "", ExceptionType.General, surveyData.answer.id, ccusername, IntegrationType.salesforce);
-                    return Ok();
-                }
-
-
+               
                 //Checks whether the CC user's SF details are existed in DB or not
                 if (Clientid == "")
                 {
@@ -488,8 +488,6 @@ new KeyValuePair<string,string>("password",Password)
                         string F1 = Field.ToString();
                         string Qid = map["qid"].ToString();
                         string tag = map["tag"].ToString();
-                        if (!Existingtaglist.Contains(tag))
-                            continue;
                         if (map["disabled"].ToString() == "True")
                             continue;
                         foreach (var res in surveyData.answer.responses)
@@ -505,7 +503,7 @@ new KeyValuePair<string,string>("password",Password)
                     if (jsonmap.Count == 0)
                     {
                         LogThisError("No Field mappings were found while  inserting ticket into SF.");
-                        await sentry.LogTheFailedRecord("No Insert Field Mapping Found for this USER.", "Token", "", ExceptionType.General, surveyData.answer.id, ccusername, IntegrationType.salesforce);
+                        await sentry.LogTheFailedRecord("No Insert Field Mapping  Found / No Input was given by the User.", "Token", "", ExceptionType.General, surveyData.answer.id, ccusername, IntegrationType.salesforce);
 
                         return BadRequest();
                     }
@@ -531,8 +529,8 @@ new KeyValuePair<string,string>("password",Password)
 
                     if (resp.Result.StatusCode != HttpStatusCode.OK)
                     {
-                        await sentry.LogTheFailedRecord(obj + "<br/>" + respString, "CallOut Exception", "", ExceptionType.Create, surveyData.answer.id, ccusername, IntegrationType.salesforce);
-                        return Ok();
+                        await sentry.LogTheFailedRecord( respString, "CallOut Exception", obj, ExceptionType.Create, surveyData.answer.id, ccusername, IntegrationType.salesforce);
+                        return BadRequest();
                     }
 
                     if (resp.Result.StatusCode == HttpStatusCode.OK)
@@ -564,7 +562,7 @@ new KeyValuePair<string,string>("password",Password)
                                             errFieldVsValues = item.Value.ToString();
                                             break;
                                         }
-                                    case "Field Level Exception":
+                                    case "FieldLevelException":
                                         {
                                             fLevelExceptionMsg = item.Value.ToString();
                                             break;
@@ -583,7 +581,7 @@ new KeyValuePair<string,string>("password",Password)
                             }
                             if (dateTime == "")
                                 dateTime = DateTime.Now.ToShortDateString();
-
+                            await CreatenoteOnTicketCreation(successCaseNo, ccusername, apiKey, surveyData.answer.id);
                             await sentry.LogThePartialSuccessRecord(surveyData.answer.id, dateTime, errFieldList, errFieldVsValues, fLevelExceptionMsg, successCaseNo, ExceptionType.FieldLevel, ccusername, integrationType);
                             return Ok();
                         }
@@ -595,12 +593,13 @@ new KeyValuePair<string,string>("password",Password)
                             string responseValue = responseMsg.Values.FirstOrDefault().ToString();
                             if (resposneKey == "SUCCESS")
                             {
+                                await CreatenoteOnTicketCreation(responseValue, ccusername, apiKey, surveyData.answer.id);
                                 return Ok();
                             }
                             else
                             {
-                                sentry.LogTheFailedRecord(obj + "<br/>" + respString, "UnKnown Exceptions", "", ExceptionType.Create, surveyData.answer.id, ccusername, IntegrationType.salesforce);
-                                return Ok();
+                                await sentry.LogTheFailedRecord(respString, "UnKnown Exceptions", "", ExceptionType.Create, surveyData.answer.id, ccusername, IntegrationType.salesforce);
+                                return BadRequest();
                             }
                         }
 
@@ -610,6 +609,7 @@ new KeyValuePair<string,string>("password",Password)
                 }
                 else
                 {
+                   
                     LogThisError("No Field mappings were found while  inserting ticket into SF.");
                     await sentry.LogTheFailedRecord("No Insert Field Mapping Found for this USER.", "Token", "", ExceptionType.General, surveyData.answer.id, ccusername, IntegrationType.salesforce);
                     return BadRequest();
@@ -620,16 +620,19 @@ new KeyValuePair<string,string>("password",Password)
             {
                 ExceptionRaised = "Timeout";
                 ExceptionRaisedMessage = ex.Message;
+
             }
             catch (Exception ex)
             {
                 ExceptionRaised = "Unknown";
                 ExceptionRaisedMessage = ex.Message;
+                //logthisfailedrecord(ex, "Unknown Exception", "", ExceptionType.General, surveyData.answer.id, ccusername, IntegrationType.salesforce);
+                //return BadRequest();
             }
             if (ExceptionRaised == "Timeout")
             {
                 await sentry.LogTheFailedRecord(ExceptionRaisedMessage, "TimedOut Exception", "", ExceptionType.Create, surveyData.answer.id, ccusername, IntegrationType.salesforce);
-
+                return BadRequest();
 
             }
             if (ExceptionRaised == "Unknown")
@@ -637,8 +640,22 @@ new KeyValuePair<string,string>("password",Password)
                 await sentry.LogTheFailedRecord(ExceptionRaisedMessage, "Unknown Exception", "", ExceptionType.General, surveyData.answer.id, ccusername, IntegrationType.salesforce);
             
             }
-            return BadRequest();
+            return Ok();
         }
+        async Task<HttpResponseMessage> CreatenoteOnTicketCreation(string CaseDetails, string ccUserName, string CCApikey, string Answerid)
+        {
+            try
+            {
+                MessageNotes notes = new MessageNotes();
+                notes.note = ConfigurationManager.AppSettings["SFTicketCreation"].ToString() + " " +  CaseDetails;
+                notes.noteTime = System.DateTime.Now.ToString();
+                return await cloudCherryController.UpdateNote(notes, Answerid, ccUserName, CCApikey);
+            }
+            catch
+            {
+                return new HttpResponseMessage();
+            }
+        }   
 
         public void LogThisError(string Errormessage)
         {
@@ -730,9 +747,12 @@ new KeyValuePair<string,string>("password",Password)
         [Route("api/Connect2SF/AddNotesAtCC")]
         public async Task<IHttpActionResult> AddNoteByAnswer()
         {
+            string Exceptiontext = "";
+
             string userName = "";
             string response = "";
             string apiKey = "";
+            var serializeNote = "";
             try
             {
                 HttpClient client = new HttpClient();
@@ -792,7 +812,7 @@ new KeyValuePair<string,string>("password",Password)
 
                 //Assing the respective values for the parameters sent  from CCSFsetting  object
                 notes.note = noteStructure.ToString();
-                var serializeNote = JsonConvert.SerializeObject(notes);
+                serializeNote = JsonConvert.SerializeObject(notes);
 
                 if (noteStructure.Length == 0)
                     return Ok();
@@ -813,9 +833,10 @@ new KeyValuePair<string,string>("password",Password)
                 //if any exception occurs that data is logged.
                 if (addNoteResponse.StatusCode != HttpStatusCode.OK)
                 {
-                    sentry.LogTheFailedRecord(addNoteRespContent, "Unknown Exception", "", ExceptionType.Update, "", ccusername, IntegrationType.salesforce);
+                    await sentry.LogTheFailedRecord(addNoteRespContent, "Unknown Exception", response, ExceptionType.Update, CCTicketId, userName, IntegrationType.salesforce);
                     return BadRequest();
                 }
+
 
                 //Need to handle exceptions
                 return Ok();
@@ -823,12 +844,16 @@ new KeyValuePair<string,string>("password",Password)
             }
             catch (Exception ex)
             {
-                sentry.LogTheFailedRecord("Unknown Exception raised at CC Into API while requesting CC API To add NOTE", "Unknown Exception", "", ExceptionType.Update, "", ccusername, IntegrationType.salesforce);
+                Exceptiontext = "Unknown";
 
-
-                return BadRequest();
             }
 
+            if (Exceptiontext == "Unknown")
+            {
+                await sentry.LogTheFailedRecord("Unknown Exception raised at CC Into API while requesting CC API To add NOTE", "Unknown Exception", response, ExceptionType.Update, "", ccusername, IntegrationType.salesforce);
+                return BadRequest();
+            }
+            return Ok();
         }
 
         /**

@@ -18,7 +18,6 @@ namespace Cherry.HelperClasses
         private string _ccUserName = "";
         private string _ccApiKey = "";
         private string _sfRefreshToken = "";   
-        private string EncryptKey = ConfigurationManager.AppSettings["EncryptKey"];
         TDesEncryption tDesEncryption = new TDesEncryption();
 
         public SalesForce() { } // Used in Retry Controller
@@ -115,7 +114,7 @@ namespace Cherry.HelperClasses
 
             using (System.IO.StreamWriter file = new System.IO.StreamWriter(logPath, true))
             {
-                file.WriteLine("Message :" + Errormessage + "<br/>" + Environment.NewLine + "Date :" + DateTime.Now.ToString());
+                file.WriteLine("Message :" + Errormessage  + Environment.NewLine + "Date :" + DateTime.Now.ToString());
                 file.WriteLine(Environment.NewLine + "-----------------------------------------------------------------------------" + Environment.NewLine);
             }
         }

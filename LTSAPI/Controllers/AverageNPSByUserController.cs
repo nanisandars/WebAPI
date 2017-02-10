@@ -17,12 +17,12 @@ namespace LTSAPI.Controllers
     public class AverageNPSByUserController : ApiController
     {
         [HttpGet]
-        public async Task<int> getAverageNPSByUser(string ccAccessToken, string reqName, string reqEmail, string reqMobile)
+        public async Task<int> getAverageNPSByUser(string ccAccessToken, string reqEmail, string reqMobile)
         {
             try
             {
                 //Get ALL the Responses for the current requester using either name, mobile or email
-                return await getResponsesByRequeser(ccAccessToken, reqName, reqEmail, reqMobile);
+                return await getResponsesByRequeser(ccAccessToken, reqEmail, reqMobile);
             }
             catch (Exception ex)
             {
@@ -31,9 +31,9 @@ namespace LTSAPI.Controllers
         }
 
         [HttpGet]
-        public async Task<int> getResponsesByRequeser(string ccAccessToken, string reqName, string reqEmail, string reqMobile)
+        public async Task<int> getResponsesByRequeser(string ccAccessToken, string reqEmail, string reqMobile)
         {
-            reqMobile = "+" + reqMobile;
+          
             reqMobile = reqMobile.Trim().Replace(" ", "");
             double avgNPS = 0;
             try
@@ -90,10 +90,6 @@ namespace LTSAPI.Controllers
 
                 string ccURLResponses = "https://api.getcloudcherry.com/api/Answers";
 
-                FilterByQuestions filterQtnsName = new FilterByQuestions();
-                filterQtnsName.questionId = qtnIDName;
-                filterQtnsName.answerCheck = new List<string>() { reqName };
-
                 FilterByQuestions filterQtnsEmail = new FilterByQuestions();
                 if (reqEmail != "")
                 {
@@ -109,7 +105,7 @@ namespace LTSAPI.Controllers
                 }
 
                 FilterBy filter = new FilterBy();
-                filter.filterquestions = new List<FilterByQuestions>() { filterQtnsName, filterQtnsEmail, filterQtnsMobile }; //
+                filter.filterquestions = new List<FilterByQuestions>() {  filterQtnsEmail, filterQtnsMobile }; //
 
                 string jsonFilter = JsonConvert.SerializeObject(filter);
                 HttpRequestMessage reqMsgAllResponses = new HttpRequestMessage();

@@ -107,8 +107,9 @@ namespace LTSAPI.Controllers
                     {
                         Integrationdata = JsonConvert.DeserializeObject<Dictionary<string, object>>(Userdata[userName].ToString());
                         if (Integrationdata.Keys.Contains(IntegrationType.ToString()))
-                            return false;
+                            Integrationdata.Remove(IntegrationType.ToString());
                         Integrationdata.Add(IntegrationType.ToString(), ClientCredentials);
+                        Userdata.Remove(userName);
                         Userdata.Add(userName, Integrationdata);
                     }
                     else
@@ -251,7 +252,7 @@ namespace LTSAPI.Controllers
 
         public string getFDClientsettingsByCCAPI(string Key, string Value, ref string UserName)
         {
-            string settingsPath = HttpContext.Current.Server.MapPath("~/" + ConfigurationManager.AppSettings["FDSettingsPath"]);
+            string settingsPath = HttpContext.Current.Server.MapPath("~/" + ConfigurationManager.AppSettings["Credentials"]);
             Dictionary<string, object> ccfduser = getFDClientsettings(settingsPath);
 
             if (ccfduser == null)
@@ -296,29 +297,33 @@ namespace LTSAPI.Controllers
         
         public Dictionary<string, object> getClientsettingsByKey(string Key, string Value, IntegrationType integrationtype)
         {
-            string AllUsersData = RetreiveIntegrationData(Usercredentialspath);
-            if (AllUsersData == "")
-                return null;
-           Dictionary<string, object> Userdata = JsonConvert.DeserializeObject<Dictionary<string, object>>(AllUsersData);
-           Dictionary<string, object> Integrationdata = new Dictionary<string, object>();
-           Dictionary<string, object> Exceptiondata = new Dictionary<string, object>();
+            try
+            {
+                string AllUsersData = RetreiveIntegrationData(Usercredentialspath);
+                if (AllUsersData == "")
+                    return null;
+                Dictionary<string, object> Userdata = JsonConvert.DeserializeObject<Dictionary<string, object>>(AllUsersData);
+                Dictionary<string, object> Integrationdata = new Dictionary<string, object>();
+                Dictionary<string, object> Exceptiondata = new Dictionary<string, object>();
 
-           foreach (KeyValuePair<string, object> KP in Userdata)
-           {
-               Integrationdata = JsonConvert.DeserializeObject<Dictionary<string, object>>(Userdata[KP.Key].ToString());
-               if (Integrationdata.Keys.Contains(integrationtype.ToString()))
-               {
-                   Exceptiondata = JsonConvert.DeserializeObject<Dictionary<string, object>>(Integrationdata[integrationtype.ToString()].ToString());
+                foreach (KeyValuePair<string, object> KP in Userdata)
+                {
+                    Integrationdata = JsonConvert.DeserializeObject<Dictionary<string, object>>(Userdata[KP.Key].ToString());
+                    if (Integrationdata.Keys.Contains(integrationtype.ToString()))
+                    {
+                        Exceptiondata = JsonConvert.DeserializeObject<Dictionary<string, object>>(Integrationdata[integrationtype.ToString()].ToString());
 
-                   if (Exceptiondata.Keys.Contains(Key))
-                   {
-                       if (Exceptiondata[Key].ToString() == Value)
-                       {
-                           return Exceptiondata;
-                       }
-                   }
-               }
+                        if (Exceptiondata.Keys.Contains(Key))
+                        {
+                            if (Exceptiondata[Key].ToString() == Value)
+                            {
+                                return Exceptiondata;
+                            }
+                        }
+                    }
+                }
             }
+            catch { }
           return null;
         }
         
@@ -446,22 +451,32 @@ namespace LTSAPI.Controllers
                 var Ques = await GetQuestions(Access_token);
                 string Questionstring = "|";
                 List<Dictionary<string, object>> tagDetails = new List<Dictionary<string, object>>();
+                List<string> Tagslist = new List<string>();
                 foreach (var q in Ques)
                 {
                     if (q.QuestionTags == null)
                         continue;
-                    Dictionary<string, object> Qids = new Dictionary<string, object>();
+                 
                     foreach (var tag in q.QuestionTags)
                     {
                         if (Questionstring.Contains("|" + tag + "|"))
                             continue;
                         Questionstring = Questionstring + tag + "|";
-                        Qids.Add("tag", tag);
-                        Qids.Add("qid", q.Id);
-                        tagDetails.Add(Qids);
-
+                      
+                      
+                        Tagslist.Add(tag + "|" + q.Id);
                     }
 
+                }
+                Tagslist = Tagslist.OrderBy(item => item.ToString()).ToList();
+                foreach (string tag_qid in Tagslist)
+                {
+                    Dictionary<string, object> Qids = new Dictionary<string, object>();
+                    char[] splitstr = { '|' };
+                    string[] tagdata = tag_qid.ToString().Split(splitstr);
+                    Qids.Add("tag", tagdata[0]);
+                    Qids.Add("qid", tagdata[1]);
+                    tagDetails.Add(Qids);
                 }
                 return tagDetails;
             }
@@ -477,7 +492,7 @@ namespace LTSAPI.Controllers
             using (System.IO.StreamWriter file = new System.IO.StreamWriter(logPath, true))
             {
 
-                file.WriteLine("Message :" + Errormessage + "<br/>" + Environment.NewLine + "Date :" + DateTime.Now.ToString());
+                file.WriteLine("Message :" + Errormessage  + Environment.NewLine + "Date :" + DateTime.Now.ToString());
                 file.WriteLine(Environment.NewLine + "-----------------------------------------------------------------------------" + Environment.NewLine);
             }
         }
@@ -915,6 +930,90 @@ namespace LTSAPI.Controllers
             catch { }
             return new List<string>();
 
+        }
+
+        public async Task<HttpResponseMessage> UpdateNote(MessageNotes notes, string AnswerID, string ccUsername, string ccPassword)
+        {
+            HttpResponseMessage reponsemessage = new HttpResponseMessage();
+            try
+            {
+                HttpClient client = new HttpClient();
+                var serializeNote = JsonConvert.SerializeObject(notes);
+                string ccURLforAddNote = "https://api.getcloudcherry.com/api/Answers/Note/" + AnswerID;
+                HttpRequestMessage addNoteRequest = new HttpRequestMessage(HttpMethod.Post, new Uri(ccURLforAddNote));
+
+                //Get AccessToken from CC
+                string ccAccessToken = await getCCAccessToken(ccUsername, ccPassword);
+                addNoteRequest.Headers.Add("Authorization", "Bearer " + ccAccessToken);
+                addNoteRequest.Content = new StringContent(serializeNote, Encoding.UTF8, "application/json");
+
+                //Get Response from the CC API
+                HttpResponseMessage addNoteResponse = await client.SendAsync(addNoteRequest);
+                string addNoteRespContent = await addNoteResponse.Content.ReadAsStringAsync();
+                return addNoteResponse;
+            }
+            catch { }
+
+            reponsemessage.StatusCode = HttpStatusCode.BadRequest;
+            return reponsemessage;
+            
+        }
+
+        // Retreives Settings Data from CC
+        public  async Task<Dictionary<string,object>> GetSettings(string AccessToken)
+        {
+
+            try
+            {
+                string SettingURl = "/api/Settings";
+
+                string Settingsdata = await HttpGet(AccessToken, SettingURl);
+                if (Settingsdata != "") ;
+                return JsonConvert.DeserializeObject<Dictionary<string, object>>(Settingsdata);
+            }
+            catch { }
+            return new Dictionary<string, object>();
+
+        }
+        // calls any given HTTP Get CC URL
+        public async Task<string> HttpGet(string AccessToken,string CCURL)
+        {
+            try
+            {
+                string apiendpoint = "https://api.getcloudcherry.com";
+                var client = new HttpClient();
+                string url = apiendpoint + CCURL;
+                HttpRequestMessage queryrequest = new HttpRequestMessage(HttpMethod.Get, url);
+
+                //Add Bearer Token To Authenticate This Stateless Request
+                queryrequest.Headers.Add("Authorization", "Bearer " + AccessToken);
+                var queryresponse = await client.SendAsync(queryrequest);
+                var responseBody = await queryresponse.Content.ReadAsStringAsync();
+                return responseBody;
+            }
+            catch { }
+            return "";
+
+          
+          
+        }
+        // Retreives the Notification name  in CC  from which  target URL is called, respective targetURL is identified by 'Controllername'
+        public async Task<string> GetNotificationName(string AccessToken, string Controllername)
+        {
+            string NotificationTargetProperty = ConfigurationManager.AppSettings["NotificationTargetProperty"].ToString();
+            Dictionary<string, object> Settingsdata = await GetSettings(AccessToken);
+            List<Dictionary<string, object>> notificationsdata = JsonConvert.DeserializeObject<List<Dictionary<string, object>>>(Settingsdata["notifications"].ToString());
+
+            foreach (Dictionary<string, object> singlenotification in notificationsdata)
+            {
+                KeyValuePair<string, object> resultdata = singlenotification.Where(x => x.Key.ToString().ToLower() == NotificationTargetProperty.ToLower() && x.Value.ToString().ToLower().Contains(Controllername.ToLower())).SingleOrDefault();
+                if (resultdata.Key != null && resultdata.Value != null)
+                {
+                    return singlenotification["name"].ToString();
+                }
+
+            }
+         return "";
         }
     }
 }

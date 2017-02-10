@@ -28,7 +28,8 @@ namespace LTSAPI.Controllers
         //Gets the FD integration key from config file
         CloudCherryController cloudCherryController = new CloudCherryController();
         string FDSettingsPath = ConfigurationManager.AppSettings["Credentials"];
-
+        string ExceptionRaised = "";
+        string ExceptionRaisedMessage = "";
         SentryController sentry = new SentryController();
         //Gets User's data from the FD JSON File
 
@@ -36,40 +37,22 @@ namespace LTSAPI.Controllers
         IntegrationType integrationType = IntegrationType.freshdesk;
 
 
-        [HttpGet]
-        [Route("api/FDCC/ConnecttoFD")]
-        public async Task<Dictionary<string, object>> ConnecttoFD(string FDkey, string FDurl, string CCAPIkey, string Username)
-        {
-            System.Net.ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12 | SecurityProtocolType.Tls11 | SecurityProtocolType.Tls;
-            Dictionary<string, object> CCFDdata = new Dictionary<string, object>();
-            try
-            {
-                CCFDdata = await GetCCTagsandFdFields(Username, CCAPIkey, FDkey, FDurl);
-                if (CCFDdata == null)
-                    return CCFDdata;
-                Dictionary<string, object> FDlogindata = new Dictionary<string, object>();
-                FDlogindata.Add("FDURL", FDurl);
-                FDlogindata.Add("FDKey", FDkey);
-                FDlogindata.Add("ccapikey", CCAPIkey);
-
-                if (CCFDdata.Count == 0)
-                    return CCFDdata;
-                cloudCherryController.AddNewUserCredentials(Username, integrationType, FDlogindata);
-                return CCFDdata;
-            }
-            catch (Exception ex) { return CCFDdata; }
-        }
 
         [HttpGet]
         [Route("api/FDCC/IsCCUserFDAuthenticated")]
         public async Task<Dictionary<string, object>> IsCCUserFDAuthenticated(string ccUsername)
         {
             try
-            {
-                Dictionary<string, object> FDlogindata = cloudCherryController.GetUserCredentials(ccUsername, IntegrationType.freshdesk);
+            {  Dictionary<string, object> FDlogindata = cloudCherryController.GetUserCredentials(ccUsername, IntegrationType.freshdesk);
+              
+                char[] splitstr = { '|' };
+                string[] integrationdetails = FDlogindata["integrationDetails"].ToString().Split(splitstr);
+           	string     FDAPIKey = integrationdetails[1];
+	        string     FDURL = integrationdetails[0];
+              
                 if (FDlogindata != null)
                 {
-                    return await GetCCTagsandFdFields(ccUsername, FDlogindata["ccapikey"].ToString(), FDlogindata["FDKey"].ToString(), FDlogindata["FDURL"].ToString());
+                    return await GetCCTagsandFdFields(ccUsername, FDlogindata["ccapikey"].ToString(), FDAPIKey,FDURL);
                 }
             }
             catch { return new Dictionary<string, object>(); }
@@ -103,6 +86,7 @@ namespace LTSAPI.Controllers
                     }
 
                 }
+
                 return qtnTagNType;
             }
             catch (Exception ex)
@@ -122,7 +106,7 @@ namespace LTSAPI.Controllers
                 Dictionary<string, object> objFDFields = await getFDTicketFields(FDKey, FDUrl);
 
                 //Removing the standard fields and NPSSCORE and CCTICKET custom fields from the dropdown in the settings screen
-                objFDFields.Remove("ccticket");
+
                 objFDFields.Remove("requester");
                 objFDFields.Remove("status");
                 objFDFields.Remove("priority");
@@ -132,7 +116,7 @@ namespace LTSAPI.Controllers
                 objFDFields.Remove("agent");
                 objFDFields.Remove("company");
                 objFDFields.Remove("product");
-                objFDFields.Remove("npsscore");
+
 
 
                 CCFDdata.Add("FDTicketField", objFDFields);
@@ -392,7 +376,7 @@ namespace LTSAPI.Controllers
         //Raises a ticket at FD
         [HttpPost]
         [Route("api/FDCC/AddATicket")]
-        public async Task<HttpStatusCode> AddATicket(NotificationData ccData)
+        public async Task<HttpResponseMessage> AddATicket(NotificationData ccData)
         {
             System.Net.ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12 | SecurityProtocolType.Tls11 | SecurityProtocolType.Tls;
 
@@ -407,7 +391,7 @@ namespace LTSAPI.Controllers
             string ccUserName = ccData.answer.user;
             string objTicketData = "";
             string surveydata = "";
-
+            HttpResponseMessage msg = new HttpResponseMessage();
             try
             {
                 if (ccData.answer != null)
@@ -420,6 +404,14 @@ namespace LTSAPI.Controllers
 
                     //Gets the CC credentials from the FD settings JSON
                     Dictionary<string, object> Userdata = cloudCherryController.GetUserCredentials(ccUserName, IntegrationType.freshdesk);
+                    if (Userdata == null)
+                    {
+                        if (await sentry.LogTheFailedRecord("User not authenticated.", "Token", "", ExceptionType.General, ccData.answer.id, ccUserName, IntegrationType.freshdesk))
+                        {
+                             msg.StatusCode = HttpStatusCode.OK;
+                            return msg;
+                        }
+                    }
                     CCApikey = Userdata["ccapikey"].ToString();
                     char[] splitstr = { '|' };
                     string[] integrationdetails = Userdata["integrationDetails"].ToString().Split(splitstr);
@@ -430,21 +422,30 @@ namespace LTSAPI.Controllers
                     if (FDAPIKey == "")
                     {
                         if (await sentry.LogTheFailedRecord("FD API KEY is not found for this user.", "Token", "", ExceptionType.General, ccData.answer.id, ccUserName, IntegrationType.freshdesk))
-                            return HttpStatusCode.OK;
+                        {
+                            msg.StatusCode = HttpStatusCode.OK;
+                            return msg;
+                        }
                     }
 
                     //If the FDURL is missing in the DB, logs the survey response 
                     if (FDURL == "")
                     {
                         if (await sentry.LogTheFailedRecord("FD URL is not found for this user.", "Token", "", ExceptionType.General, ccData.answer.id, ccUserName, IntegrationType.freshdesk))
-                            return HttpStatusCode.OK;
+                        {
+                            msg.StatusCode = HttpStatusCode.OK;
+                            return msg;
+                        }   
                     }
 
                     //If the CC APIKEY is missing in the DB, logs the survey response 
                     if (CCApikey == "")
                     {
-                        if (await sentry.LogTheFailedRecord("Client Id is not found for this user.", "Token", "", ExceptionType.General, ccData.answer.id, ccUserName, IntegrationType.freshdesk))
-                            return HttpStatusCode.OK;
+                        if (await sentry.LogTheFailedRecord("CC API Key is not found for this user.", "Token", "", ExceptionType.General, ccData.answer.id, ccUserName, IntegrationType.freshdesk))
+                          {
+                            msg.StatusCode = HttpStatusCode.OK;
+                            return msg;
+                        }
                     }
 
                     string ccAccessToken = await cloudCherryController.getCCAccessToken(ccUserName, CCApikey);
@@ -461,7 +462,10 @@ namespace LTSAPI.Controllers
 
                     string responseBody = await response.Content.ReadAsStringAsync();
                     if (responseBody == null)
-                        return HttpStatusCode.NoContent;
+                    {
+                        msg.StatusCode = HttpStatusCode.NoContent;
+                        return msg;
+                    }
 
                     responseBody = responseBody.Replace("\\", "");
                     responseBody = responseBody.Replace("\"", "'");
@@ -476,14 +480,15 @@ namespace LTSAPI.Controllers
                         {
                             strTags = strTags + tag + " ,";
                         }
-                        await sentry.LogTheFailedRecord("Client Id is not found for this user.", "Token", "", ExceptionType.General, ccData.answer.id, ccUserName, IntegrationType.freshdesk);
+                        await sentry.LogTheFailedRecord("Default mappings are not found for this user.", "Token", "", ExceptionType.General, ccData.answer.id, ccUserName, IntegrationType.freshdesk);
 
-                        return HttpStatusCode.OK;
+                       msg.StatusCode = HttpStatusCode.OK;
+                        return msg;
                     }
                     var Integrationdata = JsonConvert.DeserializeObject<Dictionary<string, object>>(responseBody);
 
                     List<Dictionary<string, object>> objMappings = JsonConvert.DeserializeObject<List<Dictionary<string, object>>>(Integrationdata["mappings"].ToString());
-                    Dictionary<string, string> jsonmap = new Dictionary<string, string>();
+                    Dictionary<string, object> jsonmap = new Dictionary<string, object>();
 
                     List<string> ExistingTaglist = await cloudCherryController.GetQuestionsTags(ccAccessToken);
                     List<string> tagListInCaps = new List<string>();
@@ -492,6 +497,11 @@ namespace LTSAPI.Controllers
                     {
                         tagListInCaps.Add(tag.ToUpper());
                     }
+
+                    Dictionary<string, object> IntegrationData = cloudCherryController.GetUserCredentials(ccData.answer.user.ToString(), IntegrationType.freshdesk);
+                    CCApikey = IntegrationData["ccapikey"].ToString();
+                    //string accessToken = await cloudCherryController.getCCAccessToken(ccData.answer.user.ToString(), CCApikey);                      
+                    List<Question> questionList = await cloudCherryController.GetQuestions(ccAccessToken).ConfigureAwait(false);
 
 
                     if (objMappings != null)
@@ -509,7 +519,7 @@ namespace LTSAPI.Controllers
                                         if (tagListInCaps.Contains(map["Tag"].ToString().ToUpper()))
                                             defaultTags.Remove("EMAIL");
                                         isRequesterField = true;
-                                        reqEmail = getValueByQId(ccData, Qid);
+                                        reqEmail = getValueByQId(ccData, Qid, questionList).ToString();
                                         break;
                                     }
                                 case "MOBILE":
@@ -517,7 +527,7 @@ namespace LTSAPI.Controllers
                                         if (tagListInCaps.Contains(map["Tag"].ToString().ToUpper()))
                                             defaultTags.Remove("MOBILE");
                                         isRequesterField = true;
-                                        reqMobile = getValueByQId(ccData, Qid);
+                                        reqMobile = getValueByQId(ccData, Qid, questionList).ToString();
                                         break;
                                     }
                                 case "NAME":
@@ -525,7 +535,7 @@ namespace LTSAPI.Controllers
                                         if (tagListInCaps.Contains(map["Tag"].ToString().ToUpper()))
                                             defaultTags.Remove("NAME");
                                         isRequesterField = true;
-                                        reqName = getValueByQId(ccData, Qid);
+                                        reqName = getValueByQId(ccData, Qid, questionList, "NAME").ToString();
                                         break;
                                     }
                                 case "SUBJECT":
@@ -533,7 +543,7 @@ namespace LTSAPI.Controllers
                                         if (tagListInCaps.Contains(map["Tag"].ToString().ToUpper()))
                                             defaultTags.Remove("SUBJECT");
                                         isRequesterField = true;
-                                        ticketSubject = getValueByQId(ccData, Qid);
+                                        ticketSubject = getValueByQId(ccData, Qid, questionList).ToString();
                                         break;
                                     }
                                 case "DESCRIPTION":
@@ -541,7 +551,7 @@ namespace LTSAPI.Controllers
                                         if (tagListInCaps.Contains(map["Tag"].ToString().ToUpper()))
                                             defaultTags.Remove("DESCRIPTION");
                                         isRequesterField = true;
-                                        ticketDescription = getValueByQId(ccData, Qid);
+                                        ticketDescription = getValueByQId(ccData, Qid, questionList).ToString();
                                         break;
                                     }
 
@@ -551,7 +561,7 @@ namespace LTSAPI.Controllers
                                 continue;
 
                             if (!isRequesterField)
-                                jsonmap.Add(Field, getValueByQId(ccData, Qid));
+                                jsonmap.Add(Field, getValueByQId(ccData, Qid, questionList, map["Tag"].ToString().ToUpper()));
                         }
 
                         if (defaultTags.Count != 0)
@@ -563,12 +573,12 @@ namespace LTSAPI.Controllers
                             }
                             if (await sentry.LogTheFailedRecord("No Default tags were provided", "While creation of ticket", "", ExceptionType.General, ccData.answer.id, ccUserName, IntegrationType.freshdesk)) ;
 
-                            return HttpStatusCode.OK;
+                            msg.StatusCode = HttpStatusCode.OK;
+                            return msg;
                         }
 
                         string nps = "";
                         string errorMessage = "";
-                        List<Question> questionList = await cloudCherryController.GetQuestions(ccAccessToken);
                         if (questionList != null)
                         {
                             Question question = cloudCherryController.GetFirstQuestionofTag("NPS", ccAccessToken, questionList, ref errorMessage);
@@ -584,6 +594,16 @@ namespace LTSAPI.Controllers
                             }
                         }
 
+                        ticketDescription = ticketDescription == "" || ticketDescription == "0" ? FormDescriptionStringByAnswer(ccData) : ticketDescription;
+                        string[] locationSplits = ccData.notification.ToString().Split(new string[] { ":" }, StringSplitOptions.None);
+                        string notificationname = "";
+                        if (locationSplits != null && locationSplits.Length>0 )
+                        {
+                            notificationname = locationSplits[locationSplits.Length-1];
+                        }
+                        string tempvariable = notificationname.ToLower().Replace("matched", "").Trim();
+                        notificationname = notificationname.Substring(0, tempvariable.Length);
+                        ticketSubject = ticketSubject == "" || ticketSubject == "0" ? ConfigurationManager.AppSettings["FDDefaultSubject"].ToString() + " '" + notificationname + "' (" + ccData.answer.id + ")" : ticketSubject;
                         List<string> tags = new List<string>();
                         tags.Add("TId:" + ccData.answer.id);
                         tags.Add("NPS:" + nps);
@@ -602,11 +622,11 @@ namespace LTSAPI.Controllers
 
                         objTicketData = JsonConvert.SerializeObject(objTicket);     //Deserializes the fd ticket object                    
 
-                        string apiKey = FDAPIKey + ":X";
+                        string fdapiKey = FDAPIKey + ":X";
                         string fdAllTicketsAPI = "/api/v2/tickets";
 
                         HttpRequestMessage requestFD = new HttpRequestMessage(HttpMethod.Post, FDURL + fdAllTicketsAPI);
-                        requestFD.Headers.Add("Authorization", "Basic " + Convert.ToBase64String(Encoding.Default.GetBytes(apiKey)));
+                        requestFD.Headers.Add("Authorization", "Basic " + Convert.ToBase64String(Encoding.Default.GetBytes(fdapiKey)));
                         requestFD.Content = new StringContent(objTicketData, Encoding.UTF8, "application/json");
 
                         HttpResponseMessage responseFD = new HttpResponseMessage();
@@ -616,44 +636,107 @@ namespace LTSAPI.Controllers
                         responseFD = await clientFD.SendAsync(requestFD);   //Sends the request to FD API
 
                         string responseFDMsg = await responseFD.Content.ReadAsStringAsync();
+                        if (responseFDMsg == null)
+                            responseFDMsg = "";
 
                         //Checks the response code and logs accordinglhy
                         if ((responseFD.StatusCode != HttpStatusCode.OK) && (responseFD.StatusCode != HttpStatusCode.Created))
                         {
                             if (responseFD.StatusCode == HttpStatusCode.BadRequest)
                             {
-                                await RemoveErrorFieldsAndCreateTicket(responseFDMsg, jsonmap, objTicket, FDURL + fdAllTicketsAPI, apiKey, ccData.answer.id, ccUserName);
+                             bool result=   await RemoveErrorFieldsAndCreateTicket(responseFDMsg, jsonmap, objTicket, FDURL , fdAllTicketsAPI, fdapiKey,CCApikey, ccData.answer.id, ccUserName);
+                                if (result == false)
+                                    msg.StatusCode = HttpStatusCode.BadRequest;
+                                else
+                                    msg.StatusCode = HttpStatusCode.OK;
+                                
+                               
+                                return msg;
                             }
                             else
                             {
                                 if (await sentry.LogTheFailedRecord(responseFDMsg, "While creation of ticket", "", ExceptionType.Create, ccData.answer.id, ccUserName, IntegrationType.freshdesk))
-                                    return HttpStatusCode.OK;
+                                {
+                                    msg.StatusCode = HttpStatusCode.BadRequest;
+                                    return msg;
+                                }
                             }
 
                         }
                         else if (responseFD.StatusCode == HttpStatusCode.Created)
                         {
                             string FDTicketId = GetFDTicketNumberByResponseMsg(responseFDMsg);
+                          
+                            await CreatenoteOnTicketCreation(FDURL, FDTicketId, ccUserName, CCApikey, ccData.answer.id);
                         }
 
-                        return HttpStatusCode.OK;
+                      msg.StatusCode = HttpStatusCode.OK;
+                        return msg;
                     }
                 }
-                return HttpStatusCode.OK;
+                msg.StatusCode = HttpStatusCode.OK;
+                return msg;
             }
             catch (TimeoutException ex)
             {
-                sentry.LogTheFailedRecord(ex.Message, "Timed Out Exception", "", ExceptionType.Create, ccData.answer.id, ccUserName, IntegrationType.freshdesk);
-
-                return HttpStatusCode.OK;
+                ExceptionRaised = "Timeout";
+                ExceptionRaisedMessage = ex.Message;
+              
             }
             catch (Exception ex)
             {
-                sentry.LogTheFailedRecord(ex.Message, "Unknown Exception : ", "", ExceptionType.General, ccData.answer.id, ccUserName, IntegrationType.freshdesk);
-
-                return HttpStatusCode.BadRequest;
+                ExceptionRaised = "Timeout";
+                ExceptionRaisedMessage = ex.Message;
+             
             }
+            if (ExceptionRaised == "Timeout")
+            {
+                await sentry.LogTheFailedRecord(ExceptionRaisedMessage, "Timed Out Exception", "", ExceptionType.Create, ccData.answer.id, ccUserName, IntegrationType.freshdesk);
 
+                msg.StatusCode = HttpStatusCode.OK;
+                return msg;
+
+            }
+            if (ExceptionRaised == "Unknown")
+            {
+                await sentry.LogTheFailedRecord(ExceptionRaisedMessage, "Unknown Exception : ", "", ExceptionType.General, ccData.answer.id, ccUserName, IntegrationType.freshdesk);
+
+                msg.StatusCode = HttpStatusCode.BadRequest;
+                return msg;
+            }
+            msg.StatusCode = HttpStatusCode.BadRequest;
+            return msg;
+        }
+
+        [HttpGet,HttpPost]
+        public string FormDescriptionStringByAnswer(NotificationData notificationData)
+        {
+            StringBuilder descriptionString = new StringBuilder();
+            try
+            {
+                string locationName = string.Empty;
+               
+               locationName = "All Locations";
+               
+                 locationName = notificationData.answer.locationId == null ? "All Locations" : notificationData.answer.locationId;
+
+                //Response response in notificationData.answer.responses)
+                for (int counter = 0; counter < notificationData.answer.responses.Count; counter++)
+                {
+                    string ansValue = (notificationData.answer.responses[counter].TextInput == null) || (notificationData.answer.responses[counter].TextInput.Trim() == "") ? notificationData.answer.responses[counter].NumberInput.ToString() : notificationData.answer.responses[counter].TextInput;
+
+                    if (counter == 0)
+                        descriptionString.Append(notificationData.answer.responses[counter].QuestionText + "  :  " + ansValue);
+                    else
+                        descriptionString.Append("  ,  " + notificationData.answer.responses[counter].QuestionText + "  :  " + ansValue);
+                }
+                return "Location Name : " + locationName + ", "+descriptionString.ToString() ;
+
+            }
+            catch (Exception ex)
+            {
+                return descriptionString.ToString();
+            }
         }
 
         public string GetFDTicketNumberByResponseMsg(string responseFDMsg)
@@ -672,8 +755,9 @@ namespace LTSAPI.Controllers
         }
 
 
-        public async Task<bool> RemoveErrorFieldsAndCreateTicket(string responseFDMsg, Dictionary<string, string> jsonmap, Dictionary<string, object> objTicket, string insertFDTicketURL, string apiKey, string ansID, string userName)
+        public async Task<bool> RemoveErrorFieldsAndCreateTicket(string responseFDMsg, Dictionary<string, object> jsonmap, Dictionary<string, object> objTicket, string FDURL,string Ticketapi, string FDapiKey, string CCapiKey,string ansID, string userName)
         {
+            string Exception = "";
             List<string> errFieldList = new List<string>();
             try
             {
@@ -697,9 +781,9 @@ namespace LTSAPI.Controllers
                 }
 
                 //jsonmap
-                Dictionary<string, string> removeCustomErrFields = new Dictionary<string, string>();
+                Dictionary<string, object> removeCustomErrFields = new Dictionary<string, object>();
                 string jsonCustomFieldsSerialize = JsonConvert.SerializeObject(jsonmap);
-                removeCustomErrFields = JsonConvert.DeserializeObject<Dictionary<string, string>>(jsonCustomFieldsSerialize);//jsonmap;
+                removeCustomErrFields = JsonConvert.DeserializeObject<Dictionary<string, object>>(jsonCustomFieldsSerialize);//jsonmap;
 
 
                 Dictionary<string, object> removeErrFields = new Dictionary<string, object>();
@@ -750,8 +834,8 @@ namespace LTSAPI.Controllers
 
                         string jsonSerializeDate = JsonConvert.SerializeObject(removeErrFields);
 
-                        HttpRequestMessage requestFDRemoveErrField = new HttpRequestMessage(HttpMethod.Post, insertFDTicketURL);
-                        requestFDRemoveErrField.Headers.Add("Authorization", "Basic " + Convert.ToBase64String(Encoding.Default.GetBytes(apiKey)));
+                        HttpRequestMessage requestFDRemoveErrField = new HttpRequestMessage(HttpMethod.Post, FDURL+Ticketapi);
+                        requestFDRemoveErrField.Headers.Add("Authorization", "Basic " + Convert.ToBase64String(Encoding.Default.GetBytes(FDapiKey)));
                         requestFDRemoveErrField.Content = new StringContent(jsonSerializeDate, Encoding.UTF8, "application/json");
 
                         HttpResponseMessage responseFDRemoveErrField = new HttpResponseMessage();
@@ -769,6 +853,7 @@ namespace LTSAPI.Controllers
                                 fields = fields + "  " + errField.Key;
                             }
                             string FDTicketId = GetFDTicketNumberByResponseMsg(responseFDRemoveErrFieldsMsg);
+                          await  CreatenoteOnTicketCreation(FDURL, FDTicketId, userName, CCapiKey, ansID);
                             bool flag = await sentry.LogThePartialSuccessRecord(ansID, DateTime.Now.ToString(), fields, JsonConvert.SerializeObject(removedFields), responseFDRemoveErrFieldsMsg, FDTicketId, ExceptionType.FieldLevel, userName, IntegrationType.freshdesk);
                             if (flag)
                                 return true;
@@ -778,7 +863,7 @@ namespace LTSAPI.Controllers
                             bool flag = await sentry.LogTheFailedRecord(responseFDRemoveErrFieldsMsg, "FieldLevel", "", ExceptionType.Create, ansID, userName, IntegrationType.freshdesk);
 
                             if (flag)
-                                return true;
+                                return false;
                         }
                     }
                     else
@@ -787,20 +872,38 @@ namespace LTSAPI.Controllers
 
 
                         if (flag)
-                            return true;
+                            return false;
                     }
                 }
             }
             catch (JsonSerializationException jsonEx)
             {
-                sentry.LogTheFailedRecord(responseFDMsg, "FieldLevel", "", ExceptionType.Create, ansID, userName, IntegrationType.freshdesk);
+                Exception = "FieldLevel";
+              
 
-                return true;
+               
             }
+                
             catch (Exception ex) { }
-            return true;
+            if( Exception == "FieldLevel")  {
+                await sentry.LogTheFailedRecord(responseFDMsg, "FieldLevel", "", ExceptionType.Create, ansID, userName, IntegrationType.freshdesk);
+                return false;
+                }
+            return false;
         }
-
+        async Task<HttpResponseMessage> CreatenoteOnTicketCreation(string FDURL, string FDTicketId, string ccUserName, string CCApikey, string Answerid)
+        {
+            try
+            {
+                MessageNotes notes = new MessageNotes();
+                notes.note = ConfigurationManager.AppSettings["FDTicketCreation"].ToString() + " " + FDURL + @"/helpdesk/tickets/" + FDTicketId;
+                notes.noteTime = System.DateTime.Now.ToString();
+                return await cloudCherryController.UpdateNote(notes, Answerid, ccUserName, CCApikey);
+            }
+            catch {
+                return new HttpResponseMessage();
+            }
+        }
         //Adds a NOTE in CC whenever update happens in FD Ticket
         [HttpPost]
         [Route("api/FDCC/AddANoteAtCC")]
@@ -808,9 +911,11 @@ namespace LTSAPI.Controllers
         {
             string UserName = "";
             var serializeNote = ""; string CCTicketId = "";
+            string Exceptionmsg="";
+            string addNoteRespContent = "";
+            MessageNotes notes = new MessageNotes();
             try
-            {
-                MessageNotes notes = new MessageNotes();
+            {             
                 string response = "";
                 HttpClient client = new HttpClient();
 
@@ -827,59 +932,17 @@ namespace LTSAPI.Controllers
                 if (response == "")
                     return Ok();
 
-                Dictionary<string, object> caseDeserialize = JsonConvert.DeserializeObject<Dictionary<string, object>>(response);
-
-                string ccapikey = "";
+                string CCApikey = "";
+                
+                Dictionary<string, object> caseDeserialize = JsonConvert.DeserializeObject<Dictionary<string, object>>(response);              
 
                 if (caseDeserialize == null)
                     return Ok();
 
-                StringBuilder propertiesNote = new StringBuilder();
 
-                Dictionary<string, object> obj = new Dictionary<string, object>();
-
-                obj = JsonConvert.DeserializeObject<Dictionary<string, object>>(response);
-
-                Dictionary<string, object> dicOne = new Dictionary<string, object>();
-
-                dicOne = JsonConvert.DeserializeObject<Dictionary<string, object>>(obj["OldTicket"].ToString());    //Before update ticket record
-
-                Dictionary<string, object> dicTwo = new Dictionary<string, object>();
-
-                dicTwo = JsonConvert.DeserializeObject<Dictionary<string, object>>(obj["NewTicket"].ToString());      //After update ticket record
-
-                var diff = dicTwo.Where(x => !dicOne.ContainsValue(x.Value)).ToDictionary(x => x.Key, x => x.Value);
-                StringBuilder sbNotes = new StringBuilder();
-                foreach (var item in diff)
-                {
-                    string s = item.Key.ToString();
-                    string s1 = item.Value.ToString();
-                    try
-                    {
-                        Dictionary<string, object> dic2 = new Dictionary<string, object>();
-                        dic2 = JsonConvert.DeserializeObject<Dictionary<string, object>>(s1);
-                        foreach (var itemKey in dic2)
-                        {
-                            if ((itemKey.Value != null) && (!(itemKey.Key.ToString().Contains("ccticket"))))
-                            {
-                                if ((itemKey.Value.ToString() != "") && (itemKey.Value.ToString() != "[]") && (itemKey.Value.ToString() != null))
-                                    sbNotes.Append(itemKey.Key.ToString() + "  :  " + itemKey.Value.ToString() + "      \\n      ");
-                            }
-                        }
-                    }
-                    catch (JsonSerializationException exx)
-                    {
-                        sbNotes.Append(item.Key.ToString() + "  :  " + item.Value.ToString() + "      \\n      ");
-                    }
-                    catch (Exception ex)
-                    { }
-                }
-
-                ccapikey = obj["CCAPIKey"].ToString();  //Gets the cc api key 
-
-                CCTicketId = obj["CCTicket"].ToString();    //Get cc ticket id 
-
-                notes.note = sbNotes.ToString();
+                UserName = caseDeserialize["CCUserName"].ToString();  //Gets the cc api key 
+                CCTicketId = caseDeserialize["CCTicketID"].ToString();    //Get cc ticket id 
+                notes.note = ConfigurationManager.AppSettings["FDTicketUpdation"].ToString() + " " + caseDeserialize["CCNoteLink"].ToString();
                 notes.noteTime = System.DateTime.Now.ToString();
 
                 string FDAPIKey = "";
@@ -887,37 +950,54 @@ namespace LTSAPI.Controllers
                 // string CCApikey = "";
 
                 serializeNote = JsonConvert.SerializeObject(notes);
-                string doc = cloudCherryController.getFDClientsettingsByCCAPI("ccapikey", ccapikey, ref UserName);
-                freshDesk.SetUserCredentials(doc, ref  FDAPIKey, ref FDURL, ref ccapikey);
+                Dictionary<string, object> Userdata = cloudCherryController.GetUserCredentials(UserName, IntegrationType.freshdesk);
+                CCApikey = Userdata["ccapikey"].ToString();
+                char[] splitstr = { '|' };
+                string[] integrationdetails = Userdata["integrationDetails"].ToString().Split(splitstr);
+                FDAPIKey = integrationdetails[1];
+                FDURL = integrationdetails[0];
+                //Dictionary<string, object> doc = cloudCherryController.GetUserCredentials("ccapikey", ccapikey, ref UserName);
+                //freshDesk.SetUserCredentials(doc, ref  FDAPIKey, ref FDURL, ref ccapikey);
 
                 //Specifying the add Note URL at CC
                 string ccURLforAddNote = "https://api.getcloudcherry.com/api/Answers/Note/" + CCTicketId;
                 HttpRequestMessage addNoteRequest = new HttpRequestMessage(HttpMethod.Post, new Uri(ccURLforAddNote));
 
                 //Get AccessToken from CC
-                string ccAccessToken = await cloudCherryController.getCCAccessToken(UserName, ccapikey);
+                string ccAccessToken = await cloudCherryController.getCCAccessToken(UserName, CCApikey);
                 addNoteRequest.Headers.Add("Authorization", "Bearer " + ccAccessToken);
                 addNoteRequest.Content = new StringContent(serializeNote, Encoding.UTF8, "application/json");
 
                 //Get Response from the CC API
                 HttpResponseMessage addNoteResponse = await client.SendAsync(addNoteRequest);
-                string addNoteRespContent = await addNoteResponse.Content.ReadAsStringAsync();
+                 addNoteRespContent = await addNoteResponse.Content.ReadAsStringAsync();
 
-                if (addNoteResponse.StatusCode != HttpStatusCode.OK)
-                {
-                    await sentry.LogTheFailedRecord(addNoteRespContent, "Unknown Exception", "", ExceptionType.Update, CCTicketId, UserName, IntegrationType.freshdesk);
-                    return BadRequest();
-                }
-                ////Need to handle exceptions
+                 if (addNoteResponse.StatusCode != HttpStatusCode.OK)
+                 {
+                     await sentry.LogTheFailedRecord(addNoteRespContent, "Unknown Exception", notes.note, ExceptionType.Update, CCTicketId, UserName, IntegrationType.freshdesk);
+                     return BadRequest();
+                 }
+                
+               
                 return Ok();
             }
             catch (Exception ex)
             {
-                sentry.LogTheFailedRecord("Unknown Exception raised at CC Into API while requesting CC API To add NOTE", "Unknown Exception", "", ExceptionType.Update, CCTicketId, UserName, IntegrationType.freshdesk);
+               Exceptionmsg="unknown";
+            }
+
+            if (Exceptionmsg == "unknown")
+            {
+                await sentry.LogTheFailedRecord("Unknown Exception raised at CC Into API while requesting CC API To add NOTE", "Unknown Exception", notes.note, ExceptionType.Update, CCTicketId, UserName, IntegrationType.freshdesk);
 
                 return BadRequest();
             }
+            return BadRequest();
         }
+
+
+
+     
 
         [HttpGet]
         [Route("api/FDCC/GetTagonEdit")]
@@ -944,16 +1024,60 @@ namespace LTSAPI.Controllers
         }
 
         //Gets the input value by the question
-        public string getValueByQId(NotificationData ccData, string Qid)
+        public object getValueByQId(NotificationData ccData, string Qid, List<Question> questionList, string tagName = "")
         {
-            Dictionary<string, object> jsonmap = new Dictionary<string, object>();
-            foreach (var res in ccData.answer.responses)
+            object ans = new object();
+            try
             {
-                if (Qid.Contains(res.QuestionId))
+                Dictionary<string, object> jsonmap = new Dictionary<string, object>();
+                foreach (var res in ccData.answer.responses)
                 {
-                    string ans = res.TextInput == "" || res.TextInput == null ? res.NumberInput.ToString() : res.TextInput.ToString();
-                    return ans;
+                    if (Qid.Contains(res.QuestionId))
+                    {
+                        ans = res.TextInput == "" || res.TextInput == null ? res.NumberInput.ToString() : res.TextInput.ToString();
+
+                        if (tagName.ToUpper() == "NAME")
+                        {
+                            ans = res.TextInput;
+                        }
+                        else if (tagName != "")
+                        {
+
+                            Question singleQuestiondata = new Question();
+                            foreach (Question SingleQuestion in questionList)
+                            {
+                                if (SingleQuestion.Id == Qid)
+                                {
+                                    singleQuestiondata = SingleQuestion;
+                                    break;
+                                }
+                            }
+                            string dType = singleQuestiondata.DisplayType;
+
+                            if ((dType.ToUpper() == "NUMBER") || (dType.ToUpper() == "STAR-5") || (dType.ToUpper() == "SMILE-5") || (dType.ToUpper() == "SCALE"))
+                            {
+                                try
+                                {
+                                    ans = (object)Convert.ToInt32(ans);
+                                }
+                                catch(Exception ex)
+                                {
+                                    ans = 0;
+                                }
+                            }
+                            else if (dType.ToUpper() == "DATE")
+                            {
+                                ans = ans.ToString().Insert(4, "-");
+                                ans = ans.ToString().Insert(7, "-");
+                            }
+                        }
+                        return ans;
+                    }
                 }
+            }
+            catch (Exception ex)
+            {
+                return ans;
             }
 
             return "";

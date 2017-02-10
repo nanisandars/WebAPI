@@ -15,7 +15,7 @@ namespace LTSAPI.CC_Classes
         public string surveyClient { get; set; }
         public List<Response> responses { get; set; }
         public bool archived { get; set; }
-        public MessageNotes notes { get; set; }
+        public List<MessageNotes> notes { get; set; }
         public Ticket openTicket { get; set; }
     }
 }
